@@ -51,18 +51,18 @@ class WebsiteParser(EventParser):
         return events
 
     def _html_schedule_events(self, soup: BeautifulSoup) -> list[dict]:
-        text = soup.get_text("\\n")
+        text = soup.get_text("\n")
         lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
         lines = [line.lstrip("# ").strip() for line in lines if line.strip()]
 
         date_re = re.compile(
-            r"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\\s+"
-            r"\d{1,2}\\s+(?:january|february|march|april|may|june|july|august|"
+            r"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+"
+            r"\d{1,2}\s+(?:january|february|march|april|may|june|july|august|"
             r"september|october|november|december)$",
             re.I,
         )
         time_re = re.compile(
-            r"^(\\d{1,2}:\\d{2})\\s*[–—-]\\s*(\\d{1,2}:\\d{2})\\s*[·•]\\s*(.+)$"
+            r"^(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*(.+)$"
         )
         languages = {
             "english", "русский", "greek", "cypriot greek",
