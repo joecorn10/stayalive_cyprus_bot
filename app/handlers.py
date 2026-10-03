@@ -1,9 +1,12 @@
 """Telegram update handlers."""
 
+from datetime import date, timedelta
+
 from app.database import (
     add_source,
     get_chat_state,
     init_db,
+    list_events,
     list_sources,
     set_chat_state,
 )
@@ -17,18 +20,14 @@ WELCOME_TEXT = (
 )
 HELP_TEXT = (
     "Используй кнопки ниже, чтобы смотреть события на Кипре.\n\n"
-    "Каталог источников и сбор событий скоро подключим."
+    "Источники уже подключены, сейчас собираю первую ленту."
 )
 
 
 def format_sources() -> str:
     sources = list_sources()
     if not sources:
-        return (
-            "📚 Источники\n\n"
-            "Пока источников нет.\n\n"
-            "Используй ➕ Добавить источник, чтобы добавить сайт, Telegram, Instagram или Facebook."
-        )
+        return "📚 Источники\n\nПока источников нет."
 
     lines = ["📚 Источники", ""]
     for source in sources:
@@ -46,6 +45,30 @@ def format_sources() -> str:
     return "\n".join(lines)
 
 
+def format_events(title: str, events) -> str:
+    if not events:
+        return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
+
+    lines = [title, ""]
+    for event in events[:30]:
+        lines.append(f"🎵 {event['title']}")
+        details = []
+        if event["time"]:
+            details.append(f"🕘 {event['time']}")
+        if event["venue"]:
+            details.append(f"📍 {event['venue']}")
+        elif event["city"]:
+            details.append(f"📍 {event['city']}")
+        if event["price"]:
+            details.append(f"💶 {event['price']}")
+        if details:
+            lines.append(" · ".join(details))
+        if event["ticket_url"]:
+            lines.append(f"🔗 {event['ticket_url']}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def handle_add_source(chat_id: int, text: str) -> str:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
@@ -53,30 +76,18 @@ def handle_add_source(chat_id: int, text: str) -> str:
 
     url = normalize_url(lines[0])
     if not url:
-        return (
-            "Похоже, это не URL 🤔\n\n"
-            "Пришли ссылку вида:\n"
-            "https://example.com"
-        )
+        return "Похоже, это не URL 🤔\n\nПришли ссылку вида:\nhttps://example.com"
 
     comment = "\n".join(lines[1:]).strip()
     source = detect_source(url, comment)
     added = add_source(
-        source["name"],
-        source["url"],
-        source["type"],
-        source["comment"],
-        source["category"],
-        source["city"],
+        source["name"], source["url"], source["type"],
+        source["comment"], source["category"], source["city"],
     )
     set_chat_state(chat_id, "idle")
 
     if not added:
-        return (
-            "ℹ️ Этот источник уже есть в каталоге.\n\n"
-            f"🔗 {source['name']}\n"
-            f"{source['url']}"
-        )
+        return f"ℹ️ Этот источник уже есть в каталоге.\n\n🔗 {source['name']}\n{source['url']}"
 
     details = [
         f"🔗 {source['name']}",
@@ -88,7 +99,6 @@ def handle_add_source(chat_id: int, text: str) -> str:
     details.append("🟢 Мониторинг: включён")
     if source["comment"]:
         details.append(f"\n💬 {source['comment']}")
-
     return "✅ Источник добавлен\n\n" + "\n".join(details)
 
 
@@ -106,11 +116,17 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        return "📅 Сегодня\n\nЛента событий скоро появится.", main_menu()
+        today = date.today().isoformat()
+        return format_events("📅 Сегодня", list_events(today, today)), main_menu()
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        return "🗓 На этой неделе\n\nНедельная лента событий скоро появится.", main_menu()
+        today = date.today()
+        end = today + timedelta(days=6)
+        return format_events(
+            "🗓 На этой неделе",
+            list_events(today.isoformat(), end.isoformat()),
+        ), main_menu()
 
     if text == "📚 Источники":
         set_chat_state(chat_id, "idle")
