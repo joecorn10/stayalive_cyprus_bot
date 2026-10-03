@@ -167,32 +167,26 @@ def poll_once(token: str) -> bool:
                 try:
                     reply_chat_id, reply_text, keyboard = handle_callback(callback)
                     api_call(token, "answerCallbackQuery", {"callback_query_id": callback_id})
+                    print(
+                        f"Telegram callback handled: chat_id={reply_chat_id} "
+                        f"text_len={len(reply_text or '')}"
+                    )
                     if reply_chat_id is not None:
-                        if message_id is not None:
-                            try:
-                                edit_message(token, reply_chat_id, message_id, reply_text, keyboard)
-                            except Exception as edit_exc:
-                                print(f"Telegram callback edit failed: {edit_exc}", file=sys.stderr)
-                                try:
-                                    delete_message(token, reply_chat_id, message_id)
-                                except Exception as delete_exc:
-                                    print(f"Telegram callback stale-message delete failed: {delete_exc}", file=sys.stderr)
-                                send_message(token, reply_chat_id, reply_text, keyboard)
-                        else:
-                            send_message(token, reply_chat_id, reply_text, keyboard)
-                except Exception as exc:
-                    print(f"Telegram callback failed for data={data!r}: {exc}", file=sys.stderr)
-                    try:
-                        api_call(
+                        # Always send the callback result as a fresh message.
+                        # Editing the previous inline-keyboard message can fail or
+                        # appear unchanged in Telegram clients, making a healthy
+                        # callback look like a dead button.
+                        sent_id = send_message(
                             token,
-                            "answerCallbackQuery",
-                            {
-                                "callback_query_id": callback_id,
-                                "text": "Не удалось открыть. Попробуй ещё раз.",
-                            },
+                            reply_chat_id,
+                            reply_text,
+                            keyboard,
+                            parse_mode=None,
                         )
-                    except Exception:
-                        pass
+                        print(
+                            f"Telegram callback response sent: chat_id={reply_chat_id} "
+                            f"message_id={sent_id}"
+                        )
             else:
                 message = update.get("message")
                 if not message:
