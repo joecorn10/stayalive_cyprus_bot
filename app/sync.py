@@ -5,6 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.database import init_db, list_sources, upsert_events
+from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.etko import EtkoParser
 from app.parsers.website import WebsiteParser
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 def _normalize(events: list[dict]) -> list[dict]:
     normalized = []
     for event in events:
+        normalize_event_dates(event)
         raw = "|".join(
             str(event.get(key, "")).strip().lower()
             for key in ("title", "date", "end_date", "time", "venue", "city")
