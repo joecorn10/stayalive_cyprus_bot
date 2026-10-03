@@ -37,7 +37,7 @@ class AggregatorParser(EventParser):
         try:
             response = requests.get(
                 self.url,
-                timeout=20,
+                timeout=45,
                 headers=HEADERS,
             )
             response.raise_for_status()
