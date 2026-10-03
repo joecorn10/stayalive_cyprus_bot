@@ -77,12 +77,40 @@ class WebsiteParser(EventParser):
             # Find the nearest preceding date heading in document order. Some
             # React sites render the heading as a div rather than an h2.
             current_date = None
-            for previous_tag in node.find_all_previous():
-                heading = re.sub(r"\s+", " ", previous_tag.get_text(" ", strip=True)).strip()
-                if date_re.match(heading):
-                    parsed = parse_event_dates(heading, default_year=default_year)
-                    current_date = parsed[0] if parsed else None
-                    break
+
+            # Prefer an explicit date in the ticket link's aria-label. This is
+            # resilient to React layouts where the visible day heading is not
+            # represented as one DOM text node.
+            aria_text = " ".join(
+                str(a.get("aria-label") or "") for a in node.find_all("a")
+            )
+            aria_date = re.search(
+                r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\s+"
+                r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
+                aria_text,
+                re.I,
+            )
+            if aria_date:
+                month_map = {
+                    "jan": "January", "feb": "February", "mar": "March",
+                    "apr": "April", "may": "May", "jun": "June",
+                    "jul": "July", "aug": "August", "sep": "September",
+                    "oct": "October", "nov": "November", "dec": "December",
+                }
+                month = month_map[aria_date.group(2).lower()]
+                parsed = parse_event_dates(
+                    f"{aria_date.group(1)} {month} {default_year}",
+                    default_year=default_year,
+                )
+                current_date = parsed[0] if parsed else None
+
+            if not current_date:
+                for previous_tag in node.find_all_previous():
+                    heading = re.sub(r"\s+", " ", previous_tag.get_text(" ", strip=True)).strip()
+                    if date_re.match(heading):
+                        parsed = parse_event_dates(heading, default_year=default_year)
+                        current_date = parsed[0] if parsed else None
+                        break
             if not current_date:
                 continue
 
