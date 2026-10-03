@@ -7,19 +7,19 @@ on:
       - "events.db"
       - "data/telegram_offset.json"
       - ".github/workflows/telegram.yml"
-  schedule:
-    - cron: "*/5 * * * *"
+      - ".github/workflows/events.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: telegram-bot
+  group: stayalive-cyprus
   cancel-in-progress: false
 
 jobs:
   poll:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,21 +35,18 @@ jobs:
       - name: Process Telegram updates
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
-        run: python -m app.main
+        run: python -m app.telegram_worker
 
       - name: Save database and Telegram offset
         run: |
           if [ -f events.db ]; then
             git add events.db
           fi
-
           git add data/telegram_offset.json
-
           if git diff --cached --quiet; then
             echo "No database or offset changes to commit."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: persist bot state"
