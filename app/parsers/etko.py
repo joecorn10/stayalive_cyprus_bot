@@ -47,7 +47,10 @@ class EtkoParser(EventParser):
                     card = card.parent
             card_text = " ".join(card.get_text(" ", strip=True).split())
 
-            start_date, end_date, time_value = _extract_datetime(card_text)
+            start_date, end_date, time_value = _extract_detail_datetime(href)
+            if not start_date:
+                # Keep the listing-page parser as a fallback.
+                start_date, end_date, time_value = _extract_datetime(card_text)
             if not start_date:
                 continue
 
@@ -68,6 +71,41 @@ class EtkoParser(EventParser):
             })
 
         return events
+
+
+def _extract_detail_datetime(url: str) -> tuple[str, str, str]:
+    try:
+        response = requests.get(url, timeout=15, headers=HEADERS)
+        response.raise_for_status()
+    except requests.RequestException:
+        return "", "", ""
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    text = " ".join(soup.get_text(" ", strip=True).split())
+
+    # ETKO event pages expose a dedicated Date/Time section.
+    date_match = re.search(
+        r"\bDate\s+(January|February|March|April|May|June|July|August|"
+        r"September|October|November|December)\s+(\d{1,2})\b",
+        text,
+        re.IGNORECASE,
+    )
+    if not date_match:
+        return "", "", ""
+
+    month = MONTHS[date_match.group(1).lower()]
+    day = int(date_match.group(2))
+    year = datetime.now().year
+    date_value = f"{year:04d}-{month:02d}-{day:02d}"
+
+    time_match = re.search(
+        r"\bTime\s+([01]?\d|2[0-3]):([0-5]\d)\b",
+        text,
+        re.IGNORECASE,
+    )
+    time_value = f"{time_match.group(1)}:{time_match.group(2)}" if time_match else ""
+
+    return date_value, date_value, time_value
 
 
 def _extract_datetime(text: str) -> tuple[str, str, str]:
