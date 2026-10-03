@@ -40,6 +40,17 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        seed_sources = [
+            ("Cyproplan", "https://cyproplan.com/", "Website", "Cyprus event aggregator"),
+            ("ETKO Cyprus", "https://etkocyprus.com/events", "Website", "Events, concerts and parties"),
+            ("SoldOut TicketBox", "https://www.soldoutticketbox.com/en/home", "Website", "Ticketing and event listings"),
+        ]
+        conn.executemany(
+            """INSERT OR IGNORE INTO sources
+               (name, url, type, comment)
+               VALUES (?, ?, ?, ?)""",
+            seed_sources,
+        )
         conn.commit()
 
 
