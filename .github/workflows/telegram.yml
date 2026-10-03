@@ -26,7 +26,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Process Telegram updates
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.main
       - name: Save Telegram offset
         run: |
