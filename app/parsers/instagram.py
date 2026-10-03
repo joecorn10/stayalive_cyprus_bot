@@ -226,7 +226,7 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
 
     escaped = page.replace("\\/", "/")
     for match in re.finditer(
-        r'https?://(?:www\\.)?instagram\\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
+        r'https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
         escaped,
         re.I,
     ):
