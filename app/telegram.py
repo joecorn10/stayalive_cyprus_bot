@@ -4,8 +4,9 @@ from pathlib import Path
 import requests
 import sys
 from app.handlers import handle_callback, handle_message
-from app.database import get_source_by_url, update_source_comment
-from app.sync import sync_all, sync_pinned_telegram_chat
+from app.database import get_chat_state, get_source_by_url, update_source_comment
+from app.source_detector import normalize_url
+from app.sync import sync_all, sync_pinned_telegram_chat, sync_source_by_url
 
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
@@ -254,7 +255,38 @@ def poll_once(token: str) -> bool:
                                 except Exception as sync_exc:
                                     print(f"Telegram on-demand sync failed: {sync_exc}", file=sys.stderr)
 
+                            awaiting_source = get_chat_state(chat_id) == "awaiting_source"
+                            source_url = normalize_url(text) if awaiting_source else ""
                             reply_text, keyboard = handle_message(message)
+
+                            if awaiting_source and source_url:
+                                # Adding a source should not wait for the next 5-minute
+                                # GitHub schedule. Parse just this source now, then show
+                                # the normal confirmation together with the sync result.
+                                check_message_id = send_message(
+                                    token,
+                                    chat_id,
+                                    "🔎 Источник добавлен. Проверяю его прямо сейчас…",
+                                    parse_mode=None,
+                                )
+                                try:
+                                    synced = sync_source_by_url(source_url)
+                                    print(f"Telegram targeted source sync: {synced} new events")
+                                    reply_text += (
+                                        f"\\n\\n🔎 Проверка завершена: новых событий — {synced}."
+                                    )
+                                except Exception as sync_exc:
+                                    print(f"Telegram targeted source sync failed: {sync_exc}", file=sys.stderr)
+                                    reply_text += (
+                                        "\\n\\n⚠️ Источник добавлен, но проверить его сейчас не удалось. "
+                                        "Повторю при следующей синхронизации."
+                                    )
+                                if check_message_id is not None:
+                                    try:
+                                        edit_message(token, chat_id, check_message_id, reply_text, keyboard, parse_mode=None)
+                                    except Exception as exc:
+                                        print(f"Telegram source-sync edit failed: {exc}", file=sys.stderr)
+                                continue
 
                             if needs_sync and progress_message_id is not None:
                                 try:
