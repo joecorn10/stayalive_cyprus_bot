@@ -102,11 +102,19 @@ CATEGORY_RULES = (
 )
 
 def classify_event(event: dict) -> str:
+    text = " ".join(str(event.get(key, "")) for key in ("title", "description", "venue", "city"))
+
+    # Comedy is intentionally checked before an explicit source category.
+    # A comedy festival/show should stay in Comedy rather than being swallowed
+    # by the broader Festivals or Theatre categories.
+    comedy_pattern = CATEGORY_RULES[0][1]
+    if comedy_pattern.search(text):
+        return "🎭 Comedy"
+
     explicit = canonical_category(event.get("category"))
     if explicit:
         return explicit
-    text = " ".join(str(event.get(key, "")) for key in ("title", "description", "venue", "city"))
-    for category, pattern in CATEGORY_RULES:
+    for category, pattern in CATEGORY_RULES[1:]:
         if pattern.search(text):
             return category
     return "✨ Другое"
