@@ -17,7 +17,7 @@ from app.database import (
     list_sources,
     set_chat_state,
 )
-from app.keyboards import back_keyboard, category_keyboard, main_menu
+from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
 from app.sync import canonical_category, sync_all
 
@@ -96,7 +96,7 @@ def format_events(
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎", None
     counts = {}
     for event in events:
-        category = event["category"] or "✨ Другое"
+        category = canonical_category(event["category"]) or "✨ Другое"
         counts[category] = counts.get(category, 0) + 1
     categories = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     period = "today" if display_date else "week"
@@ -135,7 +135,7 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-    return "\n".join(lines).rstrip(), back_keyboard(period)
+    return "\n".join(lines).rstrip(), event_keyboard(selected[:30], period, category)
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
@@ -254,7 +254,23 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         parts = data.split(":", 2)
         if len(parts) != 3:
             return chat_id, "Не удалось открыть направление.", None
-        period, category = parts[1], parts[2]
+        period, slug = parts[1], parts[2]
+        category_map = {
+            "music": "🎵 Музыка",
+            "food": "🍷 Еда и вино",
+            "art": "🎨 Искусство",
+            "nightlife": "🪩 Nightlife",
+            "theatre": "🎭 Театр и кино",
+            "workshops": "🧑‍🏫 Воркшопы",
+            "sport": "🏃 Спорт и outdoor",
+            "markets": "🛍 Маркеты и шопинг",
+            "family": "👨‍👩‍👧 Семья",
+            "festivals": "🎪 Фестивали",
+            "other": "✨ Другое",
+        }
+        category = category_map.get(slug)
+        if not category:
+            return chat_id, "Неизвестное направление.", None
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
         events = list_events(today.isoformat(), end.isoformat())
