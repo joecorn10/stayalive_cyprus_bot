@@ -86,7 +86,11 @@ def _events_keyboard(events) -> dict:
     return {"inline_keyboard": buttons}
 
 
-def format_events(title: str, events) -> tuple[str, dict | None]:
+def format_events(
+    title: str,
+    events,
+    display_date: datetime.date | None = None,
+) -> tuple[str, dict | None]:
     if not events:
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
 
@@ -94,7 +98,20 @@ def format_events(title: str, events) -> tuple[str, dict | None]:
     current_day = None
 
     for event in events[:30]:
-        day_key = event["date"]
+        event_date = datetime.fromisoformat(event["date"]).date()
+        end_date = (
+            datetime.fromisoformat(event["end_date"]).date()
+            if event["end_date"]
+            else event_date
+        )
+
+        # In the "Today" view, a multi-day event should be grouped under
+        # today rather than under the date when it originally started.
+        if display_date and event_date <= display_date <= end_date:
+            day_key = display_date.isoformat()
+        else:
+            day_key = event["date"]
+
         if day_key != current_day:
             if current_day is not None:
                 lines.append("")
@@ -117,7 +134,12 @@ def format_events(title: str, events) -> tuple[str, dict | None]:
             lines.append(" · ".join(meta))
 
         if event["end_date"] and event["end_date"] != event["date"]:
-            lines.append(f"↳ до {_date_label(event['end_date'])}")
+            if display_date and event_date < display_date <= end_date:
+                lines.append(
+                    f"↳ началось {_date_label(event['date'])} · до сегодня"
+                )
+            else:
+                lines.append(f"↳ до {_date_label(event['end_date'])}")
 
         sources = list_event_sources(event["id"])
         if sources:
@@ -265,7 +287,11 @@ def handle_message(message: dict) -> tuple[str, dict]:
         print("On-demand event sync: today")
         sync_all()
         today = cyprus_today()
-        text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()))
+        text, keyboard = format_events(
+            "📅 Сегодня",
+            list_events(today.isoformat(), today.isoformat()),
+            display_date=today,
+        )
         return text, keyboard or main_menu()
 
     if text == "🗓 На этой неделе":
