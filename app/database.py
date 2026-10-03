@@ -53,6 +53,16 @@ def init_db() -> None:
                 last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS event_sources (
+                event_id INTEGER NOT NULL,
+                source_id INTEGER NOT NULL,
+                source_url TEXT NOT NULL,
+                PRIMARY KEY (event_id, source_id, source_url),
+                FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+            )
+        """)
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(events)")}
         if "end_date" not in columns:
             conn.execute("ALTER TABLE events ADD COLUMN end_date TEXT")
@@ -107,11 +117,61 @@ def add_source(name: str, url: str, source_type: str, comment: str = "",
         return cursor.rowcount == 1
 
 
+def _event_key(event: dict) -> tuple:
+    import re
+    title = re.sub(r"[^a-z0-9а-яё]+", " ", str(event.get("title", "")).lower(), flags=re.I)
+    title = " ".join(title.split())
+    venue = re.sub(r"[^a-z0-9а-яё]+", " ", str(event.get("venue", "")).lower(), flags=re.I)
+    venue = " ".join(venue.split())
+    return (
+        title,
+        event.get("date", ""),
+        venue,
+        str(event.get("city", "")).lower().strip(),
+    )
+
+
+def _find_matching_event(conn: sqlite3.Connection, event: dict):
+    key = _event_key(event)
+    rows = conn.execute(
+        """SELECT * FROM events
+           WHERE date = ?
+             AND (COALESCE(city, '') = ? OR COALESCE(city, '') = '')
+           ORDER BY id""",
+        (key[1], key[3]),
+    ).fetchall()
+    for row in rows:
+        if _event_key(dict(row)) == key:
+            return row
+    return None
+
+
 def upsert_events(events: list[dict]) -> int:
     init_db()
     added = 0
     with get_connection() as conn:
         for event in events:
+            source_url = event.get("source_url", "")
+            source = conn.execute(
+                "SELECT id FROM sources WHERE url = ?",
+                (_source_root(source_url),),
+            ).fetchone()
+
+            # A parser may return a source URL belonging to the same registered
+            # source but with a deeper path, so fall back to the exact source.
+            if not source:
+                source = conn.execute(
+                    "SELECT id FROM sources WHERE url = ?",
+                    (source_url,),
+                ).fetchone()
+
+            existing = conn.execute(
+                "SELECT id FROM events WHERE source_url = ? LIMIT 1",
+                (source_url,),
+            ).fetchone()
+
+            match = existing or _find_matching_event(conn, event)
+
             values = (
                 event.get("title", ""),
                 event.get("description", ""),
@@ -123,38 +183,59 @@ def upsert_events(events: list[dict]) -> int:
                 event.get("city", ""),
                 event.get("price", ""),
                 event.get("ticket_url", ""),
-                event.get("source_url", ""),
+                source_url,
                 event.get("image_url", ""),
                 event.get("content_hash"),
             )
 
-            existing = conn.execute(
-                "SELECT id FROM events WHERE source_url = ? LIMIT 1",
-                (event.get("source_url", ""),),
-            ).fetchone()
-
-            if existing:
+            if match:
                 conn.execute(
                     """UPDATE events SET
                        title = ?, description = ?, category = ?, date = ?,
                        end_date = ?, time = ?, venue = ?, city = ?, price = ?,
-                       ticket_url = ?, image_url = ?, content_hash = ?,
+                       ticket_url = ?, source_url = ?, image_url = ?, content_hash = ?,
                        last_seen_at = CURRENT_TIMESTAMP
                        WHERE id = ?""",
-                    values[:10] + (values[11], values[12], existing["id"]),
+                    values + (match["id"],),
                 )
+                event_id = match["id"]
             else:
                 cursor = conn.execute(
-                    """INSERT OR IGNORE INTO events
+                    """INSERT INTO events
                        (title, description, category, date, end_date, time, venue, city,
                         price, ticket_url, source_url, image_url, content_hash)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     values,
                 )
-                added += cursor.rowcount
+                event_id = cursor.lastrowid
+                added += 1
+
+            if source:
+                conn.execute(
+                    """INSERT OR IGNORE INTO event_sources
+                       (event_id, source_id, source_url)
+                       VALUES (?, ?, ?)""",
+                    (event_id, source["id"], source_url),
+                )
 
         conn.commit()
     return added
+
+
+def _source_root(url: str) -> str:
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.netloc == "etkocyprus.com" and "/events/" in parsed.path:
+        return "https://etkocyprus.com/events"
+    if parsed.netloc == "www.soldoutticketbox.com":
+        return "https://www.soldoutticketbox.com/en/home"
+    if parsed.netloc == "cyproplan.com":
+        return "https://cyproplan.com/"
+    if parsed.netloc == "t.me":
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) >= 1:
+            return f"https://t.me/{parts[0]}"
+    return url
 
 
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
@@ -165,6 +246,19 @@ def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
                WHERE date <= ? AND COALESCE(end_date, date) >= ?
                ORDER BY date, time, title COLLATE NOCASE""",
             (end_date, start_date),
+        ).fetchall()
+
+
+def list_event_sources(event_id: int) -> list[sqlite3.Row]:
+    init_db()
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT s.name, s.type, es.source_url
+               FROM event_sources es
+               JOIN sources s ON s.id = es.source_id
+               WHERE es.event_id = ?
+               ORDER BY s.name COLLATE NOCASE""",
+            (event_id,),
         ).fetchall()
 
 
