@@ -1,6 +1,6 @@
 """Telegram update handlers."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -80,7 +80,7 @@ def _category_icon(category: str) -> str:
 def format_events(
     title: str,
     events,
-    display_date: datetime.date | None = None,
+    display_date: date | None = None,
 ) -> tuple[str, dict | None]:
     if not events:
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
