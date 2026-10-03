@@ -5,7 +5,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import init_db, list_sources, upsert_events
+from app.database import get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.etko import EtkoParser
@@ -199,6 +199,23 @@ def sync_soldout() -> int:
 
 def sync_telegram_source(url: str) -> int:
     return upsert_events(_normalize(TelegramParser(url).parse()))
+
+
+def sync_source(source) -> int:
+    """Sync one registered source without touching the rest of the catalogue."""
+    init_db()
+    events = _normalize(_parse_source(source))
+    added = upsert_events(events)
+    logger.info("%s targeted sync: %s new events", source["name"], added)
+    return added
+
+
+def sync_source_by_url(url: str) -> int:
+    """Sync the registered source identified by its canonical URL."""
+    source = get_source_by_url(url)
+    if not source:
+        return 0
+    return sync_source(source)
 
 
 def sync_all() -> int:
