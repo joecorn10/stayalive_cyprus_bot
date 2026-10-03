@@ -91,3 +91,5 @@ Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=
 pos = resp.text.find("Sunday, 4 October")
 report["html_matches"]["raw_sunday_html"] = resp.text[max(0,pos-1200):pos+500]
 Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+
+# validate nearest-date card parser
