@@ -289,15 +289,62 @@ def get_event(event_id: int):
         return conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
 
 
+def _display_title_tokens(title: str) -> set[str]:
+    import re
+
+    value = re.sub(r"[^a-z0-9а-яё]+", " ", str(title).lower(), flags=re.I)
+    generic = {
+        "festival", "festivals", "фестиваль", "фестивал", "дни", "день",
+        "мероприятие", "event", "events", "праздник",
+    }
+    return {
+        token for token in value.split()
+        if len(token) >= 4 and token not in generic
+    }
+
+
+def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
+    from difflib import SequenceMatcher
+
+    if a["date"] != b["date"]:
+        return False
+
+    if (a["category"] or "") != (b["category"] or ""):
+        return False
+
+    left = _display_title_tokens(a["title"])
+    right = _display_title_tokens(b["title"])
+    if not left or not right:
+        return False
+
+    overlap = len(left & right) / min(len(left), len(right))
+    similarity = SequenceMatcher(
+        None,
+        " ".join(sorted(left)),
+        " ".join(sorted(right)),
+    ).ratio()
+
+    # Catch syndicated copies whose wording differs slightly while keeping
+    # genuinely different same-day events separate.
+    return overlap >= 0.5 or similarity >= 0.72
+
+
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     init_db()
     with get_connection() as conn:
-        return conn.execute(
+        rows = conn.execute(
             """SELECT * FROM events
                WHERE date <= ? AND COALESCE(end_date, date) >= ?
                ORDER BY date, time, title COLLATE NOCASE""",
             (end_date, start_date),
         ).fetchall()
+
+    unique = []
+    for row in rows:
+        if any(_looks_like_duplicate_event(row, existing) for existing in unique):
+            continue
+        unique.append(row)
+    return unique
 
 
 
