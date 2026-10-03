@@ -155,6 +155,15 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         )
         return None
 
+    final_path = urlparse(response.url).path.lower()
+    if "/accounts/login" in final_path:
+        logger.warning(
+            "Instagram profile is behind a login wall for %s (final URL: %s)",
+            profile_url,
+            response.url,
+        )
+        return None
+
     return _extract_posts(response.text, profile_url)
 
 
@@ -185,6 +194,12 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
         posts.append({"url": url, "caption": caption or "", "date": date})
 
     soup = BeautifulSoup(page, "html.parser")
+
+    # Instagram may return a login page with unrelated URLs such as
+    # /p/en_US/. Never treat those as real posts.
+    if "/accounts/login/" in page.lower() or "login/?next=" in page.lower():
+        logger.warning("Instagram returned a login page; no public posts available")
+        return []
 
     # 1. JSON-LD and all embedded JSON objects. Modern Instagram has used
     # several nested shapes for the same public post data.
