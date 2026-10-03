@@ -7,22 +7,23 @@ on:
       - "events.db"
       - "data/telegram_offset.json"
       - ".github/workflows/telegram.yml"
-      - ".github/workflows/events.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: stayalive-cyprus
+  group: stayalive-cyprus-bot
   cancel-in-progress: false
 
 jobs:
-  poll:
+  bot:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Process Telegram updates
+      - name: Run bot
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.telegram_worker
@@ -50,4 +51,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: persist bot state"
+          git pull --rebase origin main
           git push
