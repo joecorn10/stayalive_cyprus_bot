@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from app.parsers.instagram import (
     InstagramParser,
     _canonical_profile_url,
+    _fetch_posts,
     _parse_datetime,
 )
 
@@ -31,7 +32,7 @@ def main() -> None:
     print(f"URL: {url}")
 
     parser = InstagramParser(url)
-    posts = parser._fetch_posts(url)
+    posts = _fetch_posts(url)
     if posts is None:
         print("Parser result: no posts returned")
         return
