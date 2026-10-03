@@ -121,17 +121,17 @@ def format_events(
             lines.append("")
             current_day = day_key
 
-        lines.append(f"{_category_icon(event['category'])} {event['title']}")
+        lines.append(f"{_category_icon(event['category'])} {escape(str(event['title']))}")
 
         meta = []
         if event["time"]:
-            meta.append(f"🕐 {event['time']}")
+            meta.append(f"🕐 {escape(str(event['time']))}")
         if event["venue"]:
-            meta.append(f"📍 {event['venue']}")
+            meta.append(f"📍 {escape(str(event['venue']))}")
         elif event["city"]:
-            meta.append(f"📍 {event['city']}")
+            meta.append(f"📍 {escape(str(event['city']))}")
         if event["price"]:
-            meta.append(f"💶 {event['price']}")
+            meta.append(f"💶 {escape(str(event['price']))}")
         if meta:
             lines.append(" · ".join(meta))
 
@@ -149,10 +149,10 @@ def format_events(
             for source in sources:
                 if source["name"] not in names:
                     names.append(source["name"])
-            lines.append("📚 " + " · ".join(names))
+            lines.append("📚 " + escape(" · ".join(names)))
         lines.append("")
 
-    return "\n".join(lines).rstrip(), None
+    return escape("\n".join(lines).rstrip(), quote=False), None
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
