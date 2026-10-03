@@ -8,7 +8,7 @@ from app.telegram import poll_once
 
 # Keep the worker alive almost for the full GitHub Actions 5-minute schedule
 # window, minimizing the gap in which Telegram updates cannot be received.
-WORKER_SECONDS = 55
+WORKER_SECONDS = 110
 SLEEP_SECONDS = 1
 
 
