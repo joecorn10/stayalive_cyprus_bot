@@ -6,9 +6,9 @@ import time
 from app.config import TELEGRAM_BOT_TOKEN
 from app.telegram import poll_once
 
-# Keep the worker alive almost for the full GitHub Actions 5-minute schedule
-# window, minimizing the gap in which Telegram updates cannot be received.
-WORKER_SECONDS = 170
+# Finish before the next scheduled GitHub Actions run starts. This keeps the
+# git-backed Telegram offset single-writer and avoids overlapping workers.
+WORKER_SECONDS = 105
 SLEEP_SECONDS = 1
 
 
