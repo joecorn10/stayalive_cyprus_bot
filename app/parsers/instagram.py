@@ -158,13 +158,48 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
     final_path = urlparse(response.url).path.lower()
     if "/accounts/login" in final_path:
         logger.warning(
-            "Instagram profile is behind a login wall for %s (final URL: %s)",
+            "Instagram profile is behind a login wall for %s; trying Reader fallback",
             profile_url,
-            response.url,
+        )
+        return _fetch_via_reader(profile_url)
+
+    return _extract_posts(response.text, profile_url)
+
+
+def _fetch_via_reader(profile_url: str) -> list[dict] | None:
+    """Fallback through Jina Reader when Instagram blocks anonymous HTML."""
+    reader_url = "https://r.jina.ai/" + profile_url
+    try:
+        response = requests.get(
+            reader_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=PROFILE_TIMEOUT + 10,
+        )
+    except requests.RequestException as exc:
+        logger.warning("Instagram Reader fallback failed: %s", exc)
+        return None
+
+    if response.status_code != 200:
+        logger.warning(
+            "Instagram Reader fallback returned HTTP %s for %s",
+            response.status_code,
+            profile_url,
         )
         return None
 
-    return _extract_posts(response.text, profile_url)
+    posts = _extract_posts(response.text, profile_url)
+    if posts:
+        logger.info(
+            "Instagram Reader fallback extracted %s posts from %s",
+            len(posts),
+            profile_url,
+        )
+    else:
+        logger.warning(
+            "Instagram Reader fallback returned content but no posts for %s",
+            profile_url,
+        )
+    return posts
 
 
 def _extract_posts(page: str, profile_url: str) -> list[dict]:
