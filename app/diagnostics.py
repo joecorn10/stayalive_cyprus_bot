@@ -95,3 +95,5 @@ Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=
 # validate nearest-date card parser
 
 # final parser validation
+
+# validate aria date parsing
