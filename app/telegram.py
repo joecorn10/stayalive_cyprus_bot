@@ -40,7 +40,6 @@ def send_message(
         payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    # Keep inline links clickable, but never generate webpage previews.
     payload["link_preview_options"] = {"is_disabled": True}
     result = api_call(token, "sendMessage", payload)
     return (result.get("result") or {}).get("message_id")
@@ -59,7 +58,6 @@ def edit_message(
         payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    # Keep inline links clickable, but never generate webpage previews.
     payload["link_preview_options"] = {"is_disabled": True}
     api_call(token, "editMessageText", payload)
 
@@ -83,8 +81,8 @@ def save_offset(offset: int) -> None:
     STATE_PATH.write_text(json.dumps({"offset": offset}, indent=2) + "\n", encoding="utf-8")
 
 
-def configure_telegram_profile(token: str) -> None:
-    """Configure the welcome description shown before the first Start."""
+def configure_telegram_menu(token: str) -> None:
+    """Configure the bot profile while keeping the persistent reply keyboard as navigation."""
     api_call(
         token,
         "setMyDescription",
@@ -107,14 +105,20 @@ def configure_telegram_profile(token: str) -> None:
             )
         },
     )
-    # Keep Telegram's native command menu hidden: the persistent reply
-    # keyboard is the bot's primary navigation.
+
+    # Telegram keeps bot commands registered server-side unless they are
+    # explicitly deleted. Remove the old command menu so it cannot duplicate
+    # the persistent reply keyboard.
+    api_call(token, "deleteMyCommands")
+
+    # Return the chat menu button to Telegram's default behavior. With no
+    # commands registered, there is no redundant command list to open.
     api_call(
         token,
         "setChatMenuButton",
         {"menu_button": {"type": "default"}},
     )
-    print("Telegram profile configured; command menu hidden.")
+    print("Telegram profile configured; command menu cleared.")
 
 
 def telegram_diagnostics(token: str) -> None:
@@ -183,8 +187,6 @@ def poll_once(token: str) -> bool:
                                 f"Telegram callback edit failed: {edit_exc}",
                                 file=sys.stderr,
                             )
-                            # If Telegram rejects an edit for an old message,
-                            # fall back to a clean replacement.
                             try:
                                 delete_message(token, chat_id, message_id)
                             except Exception as delete_exc:
@@ -236,8 +238,8 @@ def poll_once(token: str) -> bool:
 
             comment = source["comment"] or ""
             import re
-            if re.search(r"chat_id=-?\\d+", comment):
-                comment = re.sub(r"chat_id=-?\\d+", f"chat_id={chat_id}", comment)
+            if re.search(r"chat_id=-?\d+", comment):
+                comment = re.sub(r"chat_id=-?\d+", f"chat_id={chat_id}", comment)
             else:
                 comment = f"{comment}; chat_id={chat_id}"
             update_source_comment(source_url, comment)
@@ -247,7 +249,7 @@ def poll_once(token: str) -> bool:
                 send_message(
                     token,
                     chat_id,
-                    f"📌 Закреп проверен. Новых событий: {added}.\\n\\nТеперь этот чат можно обновлять автоматически.",
+                    f"📌 Закреп проверен. Новых событий: {added}.\n\nТеперь этот чат можно обновлять автоматически.",
                     parse_mode=None,
                 )
             except Exception as exc:
