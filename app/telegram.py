@@ -122,6 +122,14 @@ def configure_telegram_menu(token: str) -> None:
     print("Telegram profile configured; command menu cleared.")
 
 
+def answer_callback(token: str, callback_id: str, text: str | None = None) -> None:
+    """Acknowledge an inline-button tap immediately from the polling worker."""
+    payload = {"callback_query_id": callback_id}
+    if text:
+        payload["text"] = text[:200]
+    api_call(token, "answerCallbackQuery", payload)
+
+
 def telegram_diagnostics(token: str) -> None:
     me = api_call(token, "getMe").get("result", {})
     webhook = api_call(token, "getWebhookInfo").get("result", {})
