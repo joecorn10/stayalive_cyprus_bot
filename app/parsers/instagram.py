@@ -189,7 +189,7 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
             headers={"Content-Type": "application/json"},
             timeout=120,
         )
-        if response.status_code != 200:
+        if not 200 <= response.status_code < 300:
             logger.warning(
                 "Apify Instagram scraper returned HTTP %s for @%s: %s",
                 response.status_code,
