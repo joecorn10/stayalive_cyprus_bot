@@ -9,6 +9,7 @@ extracts post captions/URLs from the returned HTML.
 import html
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from urllib.parse import urlparse
@@ -154,7 +155,7 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
             response.status_code,
             profile_url,
         )
-        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
+        return _fetch_via_apify(profile_url) or _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
     if "/accounts/login" in final_path:
         logger.warning(
@@ -164,6 +165,82 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
     return _extract_posts(response.text, profile_url)
+
+
+def _fetch_via_apify(profile_url: str) -> list[dict] | None:
+    """Fetch recent public Instagram posts through Apify's scraper."""
+    token = os.getenv("APIFY_API_TOKEN", "").strip()
+    username = urlparse(profile_url).path.strip("/").split("/")[0]
+    if not token or not username:
+        return None
+
+    endpoint = (
+        "https://api.apify.com/v2/acts/"
+        "simple.actor~instagram-profile-posts/"
+        "run-sync-get-dataset-items"
+    )
+    payload = {
+        "usernames": [username],
+        "outputFormat": "posts",
+        "includeVideoTab": True,
+    }
+    try:
+        response = requests.post(
+            endpoint,
+            params={"token": token},
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=120,
+        )
+        if response.status_code != 200:
+            logger.warning(
+                "Apify Instagram scraper returned HTTP %s for @%s: %s",
+                response.status_code,
+                username,
+                response.text[:300],
+            )
+            return None
+        items = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning("Apify Instagram scraper failed for @%s: %s", username, exc)
+        return None
+
+    if not isinstance(items, list):
+        logger.warning("Apify Instagram scraper returned unexpected data for @%s", username)
+        return None
+
+    posts = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("error"):
+            continue
+
+        caption = item.get("caption") or item.get("text") or ""
+        post_url = (
+            item.get("url")
+            or item.get("postUrl")
+            or item.get("permalink")
+            or item.get("post_url")
+            or profile_url
+        )
+        date_value = (
+            item.get("timestamp")
+            or item.get("takenAt")
+            or item.get("takenAtTimestamp")
+            or item.get("publishedAt")
+            or item.get("date")
+        )
+        posts.append({
+            "url": str(post_url),
+            "caption": str(caption),
+            "date": date_value,
+        })
+
+    logger.info(
+        "Apify Instagram scraper extracted %s posts from @%s",
+        len(posts),
+        username,
+    )
+    return posts or None
 
 
 def _fetch_via_mobile_api(profile_url: str) -> list[dict] | None:
