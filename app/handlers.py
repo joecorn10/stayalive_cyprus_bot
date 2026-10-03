@@ -121,11 +121,8 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             lines.append("")
             current_day = day_key
         title = escape(str(event["title"]))
-        source_url = str(event["source_url"] or "").strip()
-        if source_url:
-            lines.append(f'• <a href="{escape(source_url, quote=True)}">{title}</a>')
-        else:
-            lines.append(f"• {title}")
+        # Keep the category list clean: event titles must not create Telegram link previews.
+        lines.append(f"• {title}")
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
