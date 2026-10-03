@@ -619,17 +619,53 @@ def _canonical_profile_url(url: str) -> str:
 
 
 def _find_title(text: str) -> str:
+    """Extract a compact event name from an Instagram caption."""
+    # Prefer an explicit performer/title introduced after common lead-ins.
+    explicit = re.search(
+        r"\b(?:on our stage|featuring|feat\.?|ft\.?)\s*[:—-]\s*"
+        r"([^.!?]+)",
+        text,
+        re.I,
+    )
+    if explicit:
+        candidate = explicit.group(1).strip(" -–—#")
+        if 3 <= len(candidate) <= 100:
+            return candidate
+
     chunks = re.split(r"\s*[|•·]\s*|(?<=[.!?])\s+|\s+—\s+", text)
+    candidates = []
     for chunk in chunks:
-        candidate = chunk.strip(" -–—#\n")
+        candidate = chunk.strip(" -–—#\\n")
         if not (5 <= len(candidate) <= 160):
             continue
         if parse_event_dates(candidate, default_year=datetime.now().year):
             continue
+        if TIME_RE.fullmatch(candidate):
+            continue
         if re.fullmatch(r"(?:https?://|www\.)\S+", candidate, re.I):
             continue
-        return candidate
-    return "Instagram event"
+        candidates.append(candidate)
+
+    # Instagram posters often put the actual event title in all caps.
+    for candidate in candidates:
+        letters = re.findall(r"[A-Za-zА-Яа-я]", candidate)
+        uppercase = re.findall(r"[A-ZА-Я]", candidate)
+        if len(letters) >= 5 and len(uppercase) / len(letters) >= 0.72:
+            return candidate
+
+    # "We're opening the X" / "We are opening the X" is a strong title cue.
+    opening = re.search(
+        r"\b(?:we['’]re|we are)\s+opening\s+(?:the\s+)?"
+        r"([^.!?—:]+)",
+        text,
+        re.I,
+    )
+    if opening:
+        candidate = opening.group(1).strip()
+        if 3 <= len(candidate) <= 100:
+            return candidate
+
+    return candidates[0] if candidates else "Instagram event"
 
 
 def _find_city(text: str) -> str:
