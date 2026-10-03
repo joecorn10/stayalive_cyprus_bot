@@ -87,6 +87,7 @@ def init_db() -> None:
             ("Cyproplan Telegram", "https://t.me/cyproplan", "Telegram", "Cyproplan events"),
             ("Cyprus Man Chat", "https://t.me/cyprus_man_chat", "Telegram", "Cyprus community and events"),
             ("Cyprus Events Group", "https://t.me/+xiXW5YRRXRg1Y2My", "Telegram", "Cyprus events group"),
+            ("Cyprus Meetup Pinned", "https://t.me/+0C0Mu-Xz4HAxMGNi", "TelegramPinned", "Pinned events from Cyprus community chat; chat_id is learned when /pins is used in the chat"),
             ("Volta Wine Bar", "https://www.instagram.com/voltawinebar/", "Instagram", "Wine bar events and tastings"),
             ("Joools Limassol", "https://www.instagram.com/joools.limassol/", "Instagram", "Limassol events and lifestyle"),
             ("Synerjoy Cyprus", "https://www.instagram.com/synerjoy_cy/", "Instagram", "Community and events in Cyprus"),
@@ -130,6 +131,23 @@ def add_source(name: str, url: str, source_type: str, comment: str = "",
         )
         conn.commit()
         return cursor.rowcount == 1
+
+
+def get_source_by_url(url: str):
+    init_db()
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM sources WHERE url = ?", (url,)
+        ).fetchone()
+
+
+def update_source_comment(url: str, comment: str) -> None:
+    init_db()
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE sources SET comment = ? WHERE url = ?", (comment, url)
+        )
+        conn.commit()
 
 
 def _event_key(event: dict) -> tuple:
