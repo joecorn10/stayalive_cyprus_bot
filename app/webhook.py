@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request
 
 from app.database import list_events
 from app.handlers import (
+    _event_active_on,
     cyprus_today,
     format_events,
     handle_callback,
@@ -59,8 +60,12 @@ def _cached_event_reply(text: str):
     """Build an answer from SQLite without touching slow external sources."""
     today = cyprus_today()
     if text == "📅 Сегодня":
-        events = list_events(today.isoformat(), today.isoformat())
-        return format_events("📅 Сегодня", events, display_date=today)
+        # Build Today from the same weekly snapshot used by Week, then
+        # filter locally. This also handles multi-day events correctly.
+        week_end = today + timedelta(days=6)
+        events = list_events(today.isoformat(), week_end.isoformat())
+        today_events = [event for event in events if _event_active_on(event, today)]
+        return format_events("📅 Сегодня", today_events, display_date=today)
     end = today + timedelta(days=6)
     events = list_events(today.isoformat(), end.isoformat())
     return format_events("🗓 На этой неделе", events)
