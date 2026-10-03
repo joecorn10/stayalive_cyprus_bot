@@ -21,6 +21,39 @@ from app.translator import translate_event
 logger = logging.getLogger(__name__)
 
 
+CATEGORY_ALIASES = {
+    "музыка": "🎵 Музыка",
+    "music": "🎵 Музыка",
+    "концерт": "🎵 Музыка",
+    "концерты": "🎵 Музыка",
+    "festival": "🎪 Фестивали",
+    "festivals": "🎪 Фестивали",
+    "фестиваль": "🎪 Фестивали",
+    "фестивали": "🎪 Фестивали",
+    "theatre": "🎭 Театр и кино",
+    "theater": "🎭 Театр и кино",
+    "театр": "🎭 Театр и кино",
+    "кино": "🎭 Театр и кино",
+    "art": "🎨 Искусство",
+    "искусство": "🎨 Искусство",
+    "спорт": "🏃 Спорт и outdoor",
+    "outdoor": "🏃 Спорт и outdoor",
+    "market": "🛍 Маркеты и шопинг",
+    "маркет": "🛍 Маркеты и шопинг",
+    "workshop": "🧑‍🏫 Воркшопы",
+    "воркшоп": "🧑‍🏫 Воркшопы",
+    "семья": "👨‍👩‍👧 Семья",
+    "family": "👨‍👩‍👧 Семья",
+    "events": "",
+    "события": "",
+}
+
+def canonical_category(category: str) -> str:
+    value = str(category or "").strip()
+    if not value:
+        return ""
+    return CATEGORY_ALIASES.get(value.casefold(), value)
+
 CATEGORY_RULES = (
     ("🎵 Музыка", re.compile(r"\b(concert|live|music|dj|djs|band|gig|singer|pianist|музык|концерт|диджей|ди-джей|группа|певец|джаз|techno|house)\b", re.I)),
     ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|дегустац|вино|ужин|еда|шеф|ресторан|вин|гастроном)\b", re.I)),
