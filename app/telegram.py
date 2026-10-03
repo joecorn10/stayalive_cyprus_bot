@@ -5,7 +5,7 @@ import requests
 import sys
 from app.handlers import handle_callback, handle_message
 from app.database import get_source_by_url, update_source_comment
-from app.sync import sync_pinned_telegram_chat
+from app.sync import sync_all, sync_pinned_telegram_chat
 
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
@@ -248,6 +248,11 @@ def poll_once(token: str) -> bool:
                                     "Проверяю источники, это займёт несколько секунд.",
                                     parse_mode=None,
                                 )
+                                try:
+                                    synced = sync_all()
+                                    print(f"Telegram on-demand sync: {synced} new events")
+                                except Exception as sync_exc:
+                                    print(f"Telegram on-demand sync failed: {sync_exc}", file=sys.stderr)
 
                             reply_text, keyboard = handle_message(message)
 
