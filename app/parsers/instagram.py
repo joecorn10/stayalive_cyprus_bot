@@ -159,10 +159,10 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
     if "/accounts/login" in final_path:
         logger.warning(
-            "Instagram profile is behind a login wall for %s; trying internal API fallback",
+            "Instagram profile is behind a login wall for %s; trying Apify fallback",
             profile_url,
         )
-        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
+        return _fetch_via_apify(profile_url) or _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
     return _extract_posts(response.text, profile_url)
 
