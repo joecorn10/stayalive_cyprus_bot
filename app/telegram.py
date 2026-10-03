@@ -134,7 +134,6 @@ def telegram_diagnostics(token: str) -> None:
 
 
 def poll_once(token: str) -> bool:
-    telegram_diagnostics(token)
     offset = load_offset()
     payload = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
     if offset is not None:
