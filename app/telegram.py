@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import requests
+import sys
 from app.handlers import handle_callback, handle_message
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
@@ -15,11 +16,19 @@ def api_call(token: str, method: str, payload: dict | None = None) -> dict:
         raise RuntimeError(f"Telegram API error: {data}")
     return data
 
-def send_message(token: str, chat_id: int, text: str, reply_markup: dict | None = None) -> None:
+def send_message(token: str, chat_id: int, text: str, reply_markup: dict | None = None) -> int | None:
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    api_call(token, "sendMessage", payload)
+    result = api_call(token, "sendMessage", payload)
+    return (result.get("result") or {}).get("message_id")
+
+
+def edit_message(token: str, chat_id: int, message_id: int, text: str, reply_markup: dict | None = None) -> None:
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    api_call(token, "editMessageText", payload)
 
 def load_offset() -> int | None:
     if not STATE_PATH.exists():
@@ -66,8 +75,28 @@ def poll_once(token: str) -> bool:
         chat_id = (message.get("chat") or {}).get("id")
         if chat_id is None:
             continue
+
+        text = (message.get("text") or "").strip()
+        needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
+
+        progress_message_id = None
+        if needs_sync:
+            progress_message_id = send_message(
+                token,
+                chat_id,
+                "🔎 Ищу свежие события…\n\nПроверяю источники, это займёт несколько секунд.",
+            )
+
         reply_text, keyboard = handle_message(message)
-        send_message(token, chat_id, reply_text, keyboard)
+
+        if needs_sync and progress_message_id is not None:
+            try:
+                edit_message(token, chat_id, progress_message_id, reply_text, keyboard)
+            except Exception as exc:
+                print(f"Telegram edit failed, sending result separately: {exc}", file=sys.stderr)
+                send_message(token, chat_id, reply_text, keyboard)
+        else:
+            send_message(token, chat_id, reply_text, keyboard)
     if latest_offset is not None:
         save_offset(latest_offset)
         print(f"Telegram poll: saved offset={latest_offset}")
