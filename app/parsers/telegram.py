@@ -37,15 +37,75 @@ class TelegramParser(EventParser):
         if not self.channel or self.channel.startswith("+"):
             return []
 
+        if self.channel.lower() == "cyproplan":
+            soups = _fetch_channel_pages(self.channel, pages=6)
+            events = []
+            for soup in soups:
+                events.extend(_parse_cyproplan(soup, self.url))
+            return _dedupe_events(events)
+
         preview_url = f"https://t.me/s/{self.channel}"
         response = requests.get(preview_url, timeout=20, headers=HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-
-        if self.channel.lower() == "cyproplan":
-            return _parse_cyproplan(soup, self.url)
-
         return _parse_generic(soup, self.url)
+
+
+def _fetch_channel_pages(channel: str, pages: int = 6):
+    """Fetch several Telegram preview pages so long event digests are not missed."""
+    soups = []
+    before = None
+    seen_before = set()
+
+    for _ in range(pages):
+        url = f"https://t.me/s/{channel}"
+        if before:
+            url += f"?before={before}"
+        try:
+            response = requests.get(url, timeout=20, headers=HEADERS)
+            response.raise_for_status()
+        except requests.RequestException:
+            break
+        soup = BeautifulSoup(response.text, "html.parser")
+        messages = soup.select(".tgme_widget_message")
+        if not messages:
+            break
+        soups.append(soup)
+
+        ids = []
+        for message in messages:
+            post = message.get("data-post", "")
+            if "/" in post:
+                try:
+                    ids.append(int(post.rsplit("/", 1)[1]))
+                except ValueError:
+                    pass
+        if not ids:
+            break
+        oldest = min(ids)
+        if oldest in seen_before:
+            break
+        seen_before.add(oldest)
+        before = oldest
+
+    return soups
+
+
+def _dedupe_events(events: list[dict]) -> list[dict]:
+    unique = []
+    seen = set()
+    for event in events:
+        key = (
+            re.sub(r"\s+", " ", event.get("title", "").lower()).strip(),
+            event.get("date", ""),
+            event.get("end_date", ""),
+            event.get("city", "").lower().strip(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(event)
+    return unique
 
 
 def _parse_generic(soup: BeautifulSoup, source_url: str) -> list[dict]:
