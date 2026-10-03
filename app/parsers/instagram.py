@@ -161,9 +161,86 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
             "Instagram profile is behind a login wall for %s; trying Reader fallback",
             profile_url,
         )
-        return _fetch_via_reader(profile_url)
+        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
     return _extract_posts(response.text, profile_url)
+
+
+def _fetch_via_mobile_api(profile_url: str) -> list[dict] | None:
+    """Try Instagram's internal public profile endpoint before external fallbacks."""
+    username = urlparse(profile_url).path.strip("/").split("/")[0]
+    if not username:
+        return None
+
+    endpoint = (
+        "https://i.instagram.com/api/v1/users/web_profile_info/"
+        f"?username={requests.utils.quote(username)}"
+    )
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Mobile Safari/537.36"
+        ),
+        "X-IG-App-ID": "936619743392459",
+        "Accept": "application/json",
+        "Referer": profile_url,
+    }
+    try:
+        response = requests.get(
+            endpoint,
+            headers=headers,
+            timeout=PROFILE_TIMEOUT,
+            allow_redirects=True,
+        )
+        if response.status_code != 200:
+            logger.warning(
+                "Instagram internal profile API returned HTTP %s for @%s",
+                response.status_code,
+                username,
+            )
+            return None
+        payload = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning("Instagram internal profile API failed: %s", exc)
+        return None
+
+    user = (payload.get("data") or {}).get("user") or {}
+    raw_items = (
+        user.get("edge_owner_to_timeline_media", {}).get("edges")
+        or user.get("edge_web_media", {}).get("edges")
+        or user.get("items")
+        or []
+    )
+    posts = []
+    for item in raw_items:
+        node = item.get("node", item) if isinstance(item, dict) else {}
+        caption = (
+            ((node.get("edge_media_to_caption") or {}).get("edges") or [{}])[0]
+            .get("node", {})
+            .get("text", "")
+        )
+        if not caption:
+            caption = (node.get("caption") or {}).get("text", "")
+        timestamp = node.get("taken_at_timestamp") or node.get("taken_at")
+        shortcode = node.get("shortcode") or node.get("code")
+        post_url = (
+            f"https://www.instagram.com/p/{shortcode}/"
+            if shortcode
+            else profile_url
+        )
+        posts.append({
+            "url": post_url,
+            "caption": caption,
+            "date": timestamp,
+        })
+
+    logger.info(
+        "Instagram internal profile API extracted %s posts from @%s",
+        len(posts),
+        username,
+    )
+    return posts or None
 
 
 def _fetch_via_reader(profile_url: str) -> list[dict] | None:
