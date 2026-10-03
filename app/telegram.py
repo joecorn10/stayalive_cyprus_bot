@@ -185,7 +185,7 @@ def poll_once(token: str) -> bool:
                             reply_chat_id,
                             reply_text,
                             keyboard,
-                            parse_mode=None,
+                            parse_mode="HTML",
                         )
                         print(
                             f"Telegram callback response sent: chat_id={reply_chat_id} "
