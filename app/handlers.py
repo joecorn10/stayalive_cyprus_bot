@@ -1,12 +1,16 @@
 """Telegram update handlers."""
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
+from app.config import TIMEZONE
 from app.database import (
     add_source,
+    database_stats,
     get_chat_state,
     init_db,
     list_events,
+    list_recent_events,
     list_sources,
     set_chat_state,
 )
@@ -22,6 +26,10 @@ HELP_TEXT = (
     "Используй кнопки ниже, чтобы смотреть события на Кипре.\n\n"
     "Источники уже подключены, сейчас собираю первую ленту."
 )
+
+
+def cyprus_today() -> datetime.date:
+    return datetime.now(ZoneInfo(TIMEZONE)).date()
 
 
 def format_sources() -> str:
@@ -52,7 +60,10 @@ def format_events(title: str, events) -> str:
     lines = [title, ""]
     for event in events[:30]:
         lines.append(f"🎵 {event['title']}")
-        details = []
+        event_date = event["date"]
+        if event["end_date"] and event["end_date"] != event["date"]:
+            event_date = f"{event['date']} → {event['end_date']}"
+        details = [f"📅 {event_date}"]
         if event["time"]:
             details.append(f"🕘 {event['time']}")
         if event["venue"]:
@@ -61,12 +72,34 @@ def format_events(title: str, events) -> str:
             details.append(f"📍 {event['city']}")
         if event["price"]:
             details.append(f"💶 {event['price']}")
-        if details:
-            lines.append(" · ".join(details))
+        lines.append(" · ".join(details))
         if event["ticket_url"]:
             lines.append(f"🔗 {event['ticket_url']}")
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def format_status() -> str:
+    stats = database_stats()
+    lines = [
+        "🔧 Статус",
+        "",
+        f"📚 Источники: {stats['sources']} ({stats['enabled_sources']} активных)",
+        f"🎫 События в базе: {stats['events']}",
+        f"🔮 Будущие события: {stats['upcoming']}",
+        f"🕐 Последний event seen: {stats['latest_event_seen']}",
+        "",
+        "Источник:",
+        "🟢 ETKO — парсер подключён",
+    ]
+    recent = list_recent_events(5)
+    if recent:
+        lines += ["", "Последние записи:"]
+        for event in recent:
+            end = event["end_date"] or event["date"]
+            date_text = event["date"] if end == event["date"] else f"{event['date']} → {end}"
+            lines.append(f"• {date_text} — {event['title']}")
+    return "\n".join(lines)
 
 
 def handle_add_source(chat_id: int, text: str) -> str:
@@ -114,19 +147,24 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         return (WELCOME_TEXT if text == "/start" else HELP_TEXT), main_menu()
 
+    if text == "/status" or text == "🔧 Статус":
+        set_chat_state(chat_id, "idle")
+        return format_status(), main_menu()
+
+    if text == "/debug":
+        set_chat_state(chat_id, "idle")
+        return format_status(), main_menu()
+
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        today = date.today().isoformat()
-        return format_events("📅 Сегодня", list_events(today, today)), main_menu()
+        today = cyprus_today()
+        return format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat())), main_menu()
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        today = date.today()
+        today = cyprus_today()
         end = today + timedelta(days=6)
-        return format_events(
-            "🗓 На этой неделе",
-            list_events(today.isoformat(), end.isoformat()),
-        ), main_menu()
+        return format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat())), main_menu()
 
     if text == "📚 Источники":
         set_chat_state(chat_id, "idle")
