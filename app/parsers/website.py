@@ -21,6 +21,10 @@ class WebsiteParser(EventParser):
         response = requests.get(self.url, timeout=20, headers=HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
+        if "stantarkkomety.com" in self.url:
+            stantar_events = self._stantar_cards(soup)
+            if stantar_events:
+                return stantar_events
         events = []
         seen = set()
 
@@ -49,6 +53,77 @@ class WebsiteParser(EventParser):
         # generic date/time/venue line parser.
         if not events:
             events = self._html_schedule_events(soup)
+        return events
+
+    def _stantar_cards(self, soup: BeautifulSoup) -> list[dict]:
+        """Parse Stantar Kkomety's individual festival cards from stable semantics."""
+        month_map = {
+            "jan": "January", "feb": "February", "mar": "March",
+            "apr": "April", "may": "May", "jun": "June",
+            "jul": "July", "aug": "August", "sep": "September",
+            "oct": "October", "nov": "November", "dec": "December",
+        }
+        year_match = re.search(r"\b(20\d{2})\b", soup.get_text(" ", strip=True))
+        default_year = int(year_match.group(1)) if year_match else datetime.now().year
+        meta_re = re.compile(
+            r"^(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*(.+)$"
+        )
+        date_re = re.compile(
+            r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\s+"
+            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
+            re.I,
+        )
+        events = []
+
+        for card in soup.find_all("li", class_=re.compile(r"individualCard", re.I)):
+            meta = card.find(class_=re.compile(r"showMeta", re.I))
+            title_node = card.find("h3")
+            if not meta or not title_node:
+                continue
+
+            match = meta_re.match(re.sub(r"\s+", " ", meta.get_text(" ", strip=True)))
+            if not match:
+                continue
+
+            aria_text = " ".join(
+                str(a.get("aria-label") or "") for a in card.find_all("a")
+            )
+            date_match = date_re.search(aria_text)
+            if not date_match:
+                continue
+
+            month = month_map[date_match.group(2).lower()]
+            parsed = parse_event_dates(
+                f"{date_match.group(1)} {month} {default_year}",
+                default_year=default_year,
+            )
+            if not parsed:
+                continue
+
+            title = re.sub(r"\s+", " ", title_node.get_text(" ", strip=True)).strip()
+            start_time, _, venue = match.groups()
+            ticket = card.find("a", href=True, class_=re.compile(r"buySingle", re.I))
+            if not ticket:
+                ticket = card.find(
+                    "a", href=True,
+                    string=re.compile(r"buy\s*tickets|купить\s*билет", re.I),
+                )
+
+            events.append({
+                "title": title[:200],
+                "description": "",
+                "date": parsed[0],
+                "end_date": parsed[0],
+                "time": start_time,
+                "venue": venue[:200],
+                "city": "Limassol",
+                "price": "",
+                "ticket_url": urljoin(self.url, ticket["href"]) if ticket else "",
+                "source_url": self.url,
+                "image_url": "",
+                "category": _website_category(title),
+            })
+
         return events
 
     def _card_schedule_events(self, soup: BeautifulSoup) -> list[dict]:
