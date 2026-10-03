@@ -66,7 +66,11 @@ class FacebookParser(EventParser):
         return response.text
 
     def parse(self) -> list[dict]:
-        urls = [self.url + "/events", self.url]
+        urls = [
+            self.url + "/events",
+            self.url + "/upcoming_hosted_events",
+            self.url,
+        ]
         seen = set()
         events = []
 
@@ -93,6 +97,10 @@ class FacebookParser(EventParser):
     def _parse_html(self, html: str, page_url: str) -> list[dict]:
         soup = BeautifulSoup(html, "html.parser")
         events = []
+
+        # Facebook may expose event payloads as JSON in script tags even when
+        # the visible HTML is sparse.
+        events.extend(self._parse_embedded_json(soup, page_url))
 
         # First use schema.org Event objects when Facebook exposes them.
         for node in soup.find_all("script", type="application/ld+json"):
@@ -141,6 +149,58 @@ class FacebookParser(EventParser):
             })
 
         return events
+
+    def _parse_embedded_json(self, soup: BeautifulSoup, page_url: str) -> list[dict]:
+        """Best-effort extraction from Facebook's embedded JSON payloads."""
+        events = []
+        for script in soup.find_all("script"):
+            raw = script.string or script.get_text()
+            if not raw or "event" not in raw.lower():
+                continue
+
+            for match in re.finditer(
+                r'"(?:name|title)"\\s*:\\s*"([^"\\\\]{3,300})"[^{}]{0,2500}?'
+                r'"(?:start_time|startTime|start_date|startDate)"\\s*:\\s*"?([^",}]{6,40})',
+                raw,
+                re.I,
+            ):
+                title = match.group(1)
+                start = match.group(2).strip()
+                date, time = self._parse_timestamp(start)
+                if not date:
+                    continue
+                context = raw[max(0, match.start()-500):match.end()+500]
+                events.append({
+                    "title": title.strip(),
+                    "description": "",
+                    "date": date,
+                    "end_date": "",
+                    "time": time,
+                    "venue": "",
+                    "city": self._infer_city(title + " " + context),
+                    "price": "",
+                    "ticket_url": "",
+                    "source_url": page_url,
+                    "image_url": "",
+                    "category": self._infer_category(title),
+                })
+        return events
+
+    @staticmethod
+    def _parse_timestamp(value: str) -> tuple[str, str]:
+        value = value.strip().strip('"')
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return dt.date().isoformat(), dt.strftime("%H:%M")
+        except ValueError:
+            pass
+        match = re.search(r"(\\d{4})[-/](\\d{1,2})[-/](\\d{1,2})", value)
+        if match:
+            return (
+                f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-{int(match.group(3)):02d}",
+                "",
+            )
+        return "", ""
 
     def _from_jsonld(self, item: dict, page_url: str) -> dict | None:
         start = item.get("startDate")
