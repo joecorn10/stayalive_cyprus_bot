@@ -60,6 +60,14 @@ def edit_message(
     api_call(token, "editMessageText", payload)
 
 
+def delete_message(token: str, chat_id: int, message_id: int) -> None:
+    api_call(
+        token,
+        "deleteMessage",
+        {"chat_id": chat_id, "message_id": message_id},
+    )
+
+
 def load_offset() -> int | None:
     if not STATE_PATH.exists():
         return None
@@ -137,6 +145,19 @@ def poll_once(token: str) -> bool:
                                 f"Telegram callback edit failed: {edit_exc}",
                                 file=sys.stderr,
                             )
+                            # Do not leave the old message (and its link previews)
+                            # above the newly rendered result.
+                            try:
+                                delete_message(token, chat_id, message_id)
+                                print(
+                                    "Telegram callback: deleted stale message "
+                                    f"chat_id={chat_id} message_id={message_id}"
+                                )
+                            except Exception as delete_exc:
+                                print(
+                                    f"Telegram callback stale-message delete failed: {delete_exc}",
+                                    file=sys.stderr,
+                                )
                             send_message(token, chat_id, reply_text, keyboard)
                     else:
                         send_message(token, chat_id, reply_text, keyboard)
