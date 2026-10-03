@@ -1,0 +1,54 @@
+name: Daily event sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:00 UTC = 06:00 Cyprus during summer time, 05:00 during winter time.
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stayalive-cyprus-daily-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Sync events
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
+        run: python -c "from app.sync import sync_all; print('Daily event sync started'); added = sync_all(); print(f'Daily event sync finished: {added} new events')"
+
+      - name: Save database
+        run: |
+          if [ ! -f events.db ]; then
+            echo "events.db was not created."
+            exit 1
+          fi
+          git add events.db
+          if git diff --cached --quiet; then
+            echo "No database changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: daily event sync"
+          git pull --rebase origin main
+          git push
