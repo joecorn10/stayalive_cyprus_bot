@@ -11,6 +11,7 @@ from app.parsers.etko import EtkoParser
 from app.parsers.website import WebsiteParser
 from app.parsers.aggregator import AggregatorParser
 from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
+from app.parsers.instagram import InstagramParser
 from app.parsers.soldout import SoldOutParser
 from app.parsers.telegram import TelegramParser
 from app.translator import translate_event
@@ -55,6 +56,8 @@ def _parse_source(source) -> list[dict]:
         return FacebookParser(source["url"]).parse()
     if source["type"] == "Telegram":
         return TelegramParser(source["url"]).parse()
+    if source["type"] == "Instagram":
+        return InstagramParser(source["url"]).parse()
     return []
 
 
