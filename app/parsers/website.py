@@ -83,4 +83,9 @@ class WebsiteParser(EventParser):
 def _time(value: str) -> str:
     m = re.search(r"T(\d{2}:\d{2})", value)
     return m.group(1) if m else ""
-\n\ndef _end_date(end_dates, start_dates):\n    if end_dates:\n        return end_dates[1] if len(end_dates) > 1 else end_dates[0]\n    return start_dates[1] if len(start_dates) > 1 else start_dates[0]\n
+
+
+def _end_date(end_dates, start_dates):
+    if end_dates:
+        return end_dates[1] if len(end_dates) > 1 else end_dates[0]
+    return start_dates[1] if len(start_dates) > 1 else start_dates[0]
