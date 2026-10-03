@@ -19,8 +19,8 @@ def main() -> None:
     try:
         configure_telegram_menu(TELEGRAM_BOT_TOKEN)
     except Exception as exc:
-        # Profile/menu setup must not stop polling after a transient Telegram error.
-        print(f"Telegram profile configuration failed: {exc}", file=sys.stderr)
+        # Menu setup must not prevent polling if Telegram has a transient error.
+        print(f"Telegram menu configuration failed: {exc}", file=sys.stderr)
 
     deadline = time.monotonic() + WORKER_SECONDS
     handled = False

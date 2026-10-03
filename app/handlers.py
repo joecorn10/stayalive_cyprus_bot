@@ -318,9 +318,9 @@ def handle_message(message: dict) -> tuple[str, dict]:
     if chat_id is None:
         return "Не удалось определить чат.", main_menu()
 
-    # Telegram may deliver commands as /start@bot_username in groups.
-    # Treat both forms as a fresh start and always restore the main menu.
+    # Commands exposed by Telegram's visible Menu button.
     command = text.split("@", 1)[0] if text.startswith("/") else text
+
     if command in ("/start", "/help"):
         set_chat_state(chat_id, "idle")
         if command == "/start":

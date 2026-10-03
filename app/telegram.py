@@ -84,29 +84,7 @@ def save_offset(offset: int) -> None:
 
 
 def configure_telegram_menu(token: str) -> None:
-    """Configure the bot profile and visible Telegram command menu."""
-    api_call(
-        token,
-        "setMyDescription",
-        {
-            "description": (
-                "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
-                "События на Кипре: концерты, выставки, вечеринки, "
-                "дегустации, маркеты и другие причины выйти из дома.\n\n"
-                "Нажми Start, чтобы открыть бота."
-            )
-        },
-    )
-    api_call(
-        token,
-        "setMyShortDescription",
-        {
-            "short_description": (
-                "События на Кипре: концерты, искусство, "
-                "вечеринки, еда и другие планы."
-            )
-        },
-    )
+    """Configure Telegram's visible command menu for an empty/new chat."""
     api_call(
         token,
         "setMyCommands",
@@ -126,7 +104,7 @@ def configure_telegram_menu(token: str) -> None:
         "setChatMenuButton",
         {"menu_button": {"type": "commands"}},
     )
-    print("Telegram profile and menu configured.")
+    print("Telegram menu configured.")
 
 
 def telegram_diagnostics(token: str) -> None:
