@@ -40,6 +40,7 @@ def init_db() -> None:
                 description TEXT,
                 category TEXT,
                 date TEXT NOT NULL,
+                end_date TEXT,
                 time TEXT,
                 venue TEXT,
                 city TEXT,
@@ -52,6 +53,11 @@ def init_db() -> None:
                 last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(events)")}
+        if "end_date" not in columns:
+            conn.execute("ALTER TABLE events ADD COLUMN end_date TEXT")
+            conn.execute("UPDATE events SET end_date = date WHERE end_date IS NULL")
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_state (
                 chat_id INTEGER PRIMARY KEY,
@@ -87,14 +93,8 @@ def list_sources() -> list[sqlite3.Row]:
         ).fetchall()
 
 
-def add_source(
-    name: str,
-    url: str,
-    source_type: str,
-    comment: str = "",
-    category: str = "",
-    city: str = "",
-) -> bool:
+def add_source(name: str, url: str, source_type: str, comment: str = "",
+               category: str = "", city: str = "") -> bool:
     init_db()
     with get_connection() as conn:
         cursor = conn.execute(
@@ -114,14 +114,15 @@ def upsert_events(events: list[dict]) -> int:
         for event in events:
             cursor = conn.execute(
                 """INSERT OR IGNORE INTO events
-                   (title, description, category, date, time, venue, city,
+                   (title, description, category, date, end_date, time, venue, city,
                     price, ticket_url, source_url, image_url, content_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     event.get("title", ""),
                     event.get("description", ""),
                     event.get("category", ""),
                     event.get("date", ""),
+                    event.get("end_date") or event.get("date", ""),
                     event.get("time", ""),
                     event.get("venue", ""),
                     event.get("city", ""),
@@ -142,9 +143,42 @@ def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     with get_connection() as conn:
         return conn.execute(
             """SELECT * FROM events
-               WHERE date BETWEEN ? AND ?
+               WHERE date <= ? AND COALESCE(end_date, date) >= ?
                ORDER BY date, time, title COLLATE NOCASE""",
-            (start_date, end_date),
+            (end_date, start_date),
+        ).fetchall()
+
+
+def database_stats() -> dict:
+    init_db()
+    with get_connection() as conn:
+        sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+        enabled_sources = conn.execute(
+            "SELECT COUNT(*) FROM sources WHERE enabled = 1"
+        ).fetchone()[0]
+        events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        upcoming = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE COALESCE(end_date, date) >= date('now')"
+        ).fetchone()[0]
+        latest = conn.execute("SELECT MAX(last_seen_at) FROM events").fetchone()[0]
+    return {
+        "sources": sources,
+        "enabled_sources": enabled_sources,
+        "events": events,
+        "upcoming": upcoming,
+        "latest_event_seen": latest or "—",
+    }
+
+
+def list_recent_events(limit: int = 10) -> list[sqlite3.Row]:
+    init_db()
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT title, date, end_date, time, venue, city, source_url
+               FROM events
+               ORDER BY date DESC, time DESC, id DESC
+               LIMIT ?""",
+            (limit,),
         ).fetchall()
 
 
