@@ -120,3 +120,8 @@ def sync_all() -> int:
             logger.exception("%s database update failed", name)
 
     return total
+
+
+def sync_pinned_telegram_chat(token: str, chat_id: int, source_url: str) -> int:
+    events = _normalize(TelegramPinnedParser(token, chat_id, source_url).parse())
+    return upsert_events(events)
