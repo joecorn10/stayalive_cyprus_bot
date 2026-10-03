@@ -58,6 +58,19 @@ class CyproplanParser(EventParser):
                 continue
 
             soup = BeautifulSoup(response.text, "html.parser")
+            # The catalogue may render event cards through JS or embedded data,
+            # so discover /event/... URLs from both anchors and raw HTML.
+            raw_urls = re.findall(
+                r"(?:https?://cyproplan\\.com)?/event/[A-Za-z0-9%_\\-]+",
+                response.text,
+                flags=re.I,
+            )
+            for raw_url in raw_urls:
+                href = urljoin(discovery_url, raw_url).split("#", 1)[0]
+                if _is_event_url(href) and href not in seen_urls:
+                    seen_urls.add(href)
+                    event_urls.append(href)
+
             for link in soup.find_all("a", href=True):
                 href = urljoin(discovery_url, link["href"]).split("#", 1)[0]
                 if not _is_event_url(href) or href in seen_urls:
@@ -65,7 +78,7 @@ class CyproplanParser(EventParser):
                 seen_urls.add(href)
                 event_urls.append(href)
 
-        logger.info("Cyproplan discovery: %s event URLs", len(event_urls))
+        print(f"Cyproplan discovery: {len(event_urls)} event URLs", flush=True)
 
         events = []
         for event_url in event_urls:
@@ -80,7 +93,7 @@ class CyproplanParser(EventParser):
             if event:
                 events.append(event)
 
-        logger.info("Cyproplan parsed: %s events", len(events))
+        print(f"Cyproplan parsed: {len(events)} events", flush=True)
         return events
 
 
