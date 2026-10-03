@@ -34,12 +34,12 @@ jobs:
 
       - name: Save database and Telegram offset
         run: |
-          if [ ! -f events.db ] && [ ! -f data/telegram_offset.json ]; then
-            echo "No database or offset changes to persist."
-            exit 0
+          if [ -f events.db ]; then
+            git add events.db
           fi
 
-          git add events.db data/telegram_offset.json
+          git add data/telegram_offset.json
+
           if git diff --cached --quiet; then
             echo "No database or offset changes to commit."
             exit 0
