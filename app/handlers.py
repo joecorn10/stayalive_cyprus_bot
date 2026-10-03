@@ -327,6 +327,15 @@ def handle_message(message: dict) -> tuple[str, dict]:
             return WELCOME_TEXT, main_menu("Выбери действие…")
         return HELP_TEXT, main_menu("Выбери действие…")
 
+    if command == "/today":
+        text = "📅 Сегодня"
+    elif command == "/week":
+        text = "🗓 На этой неделе"
+    elif command == "/sources":
+        text = "📚 Источники"
+    elif command == "/add":
+        text = "➕ Добавить источник"
+
     if text == "/status" or text == "🔧 Статус":
         set_chat_state(chat_id, "idle")
         return format_status(), main_menu()
