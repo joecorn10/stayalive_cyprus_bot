@@ -9,7 +9,7 @@ from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.etko import EtkoParser
 from app.parsers.website import WebsiteParser
-from app.parsers.facebook import FacebookParser
+from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
 from app.parsers.soldout import SoldOutParser
 from app.parsers.telegram import TelegramParser
 
@@ -40,6 +40,8 @@ def _parse_source(source) -> list[dict]:
         return SoldOutParser().parse()
     if source["type"] == "Website":
         return WebsiteParser(source["url"]).parse()
+    if source["type"] == "FacebookDiscovery":
+        return FacebookDiscoveryParser(source.get("url", "")).parse()
     if source["type"] == "Facebook":
         return FacebookParser(source["url"]).parse()
     if source["type"] == "Telegram":
