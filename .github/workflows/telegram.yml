@@ -34,11 +34,17 @@ jobs:
 
       - name: Save database and Telegram offset
         run: |
+          if [ ! -f events.db ] && [ ! -f data/telegram_offset.json ]; then
+            echo "No database or offset changes to persist."
+            exit 0
+          fi
+
           git add events.db data/telegram_offset.json
           if git diff --cached --quiet; then
             echo "No database or offset changes to commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: persist bot state"
