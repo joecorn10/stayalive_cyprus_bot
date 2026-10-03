@@ -91,18 +91,18 @@ class InstagramParser(EventParser):
         if not text or len(text) < 20:
             return None
 
+        if not _looks_like_event(text):
+            return None
+
         dates = parse_event_dates(
             text,
             default_year=(post_date or datetime.now()).year,
         )
         if not dates:
             return None
-        if not EVENT_WORDS.search(text) and not TIME_RE.search(text):
-            return None
 
         title = _find_title(text)
-        time_match = TIME_RE.search(text)
-        time_value = time_match.group(0).strip() if time_match else ""
+        time_value = _find_event_time(text)
 
         return {
             "title": title[:200],
@@ -110,13 +110,13 @@ class InstagramParser(EventParser):
             "date": dates[0],
             "end_date": dates[1],
             "time": time_value,
-            "venue": "",
+            "venue": _find_venue(text),
             "city": _find_city(text),
             "price": _find_price(text),
             "ticket_url": post_url or self.url,
             "source_url": post_url or self.url,
             "image_url": "",
-            "category": "События",
+            "category": _find_category(text),
         }
 
 
@@ -144,8 +144,16 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
             allow_redirects=True,
         )
     except requests.RequestException as exc:
-        logger.warning("Instagram profile request failed: %s", exc)
-        return None
+        logger.warning(
+            "Instagram profile request failed for %s; trying Apify fallback: %s",
+            profile_url,
+            exc,
+        )
+        return (
+            _fetch_via_apify(profile_url)
+            or _fetch_via_mobile_api(profile_url)
+            or _fetch_via_reader(profile_url)
+        )
 
     final_path = urlparse(response.url).path.lower()
     if response.status_code != 200:
@@ -617,9 +625,36 @@ def _canonical_profile_url(url: str) -> str:
     return f"https://www.instagram.com/{handle}/"
 
 
+def _looks_like_event(text: str) -> bool:
+    """Return True when the caption is actually promoting an event."""
+    if not (EVENT_WORDS.search(text) or TIME_RE.search(text)):
+        return False
+
+    external_place = re.search(
+        r"(?:📍|at)\s*([A-Za-z][A-Za-z0-9 .&'_-]{2,60})",
+        text,
+        re.I,
+    )
+    partner_context = re.search(
+        r"\b(?:partner|sponsor|sponsored|in partnership|proud partner|"
+        r"treating the winning team)\b",
+        text,
+        re.I,
+    )
+    return not (external_place and partner_context)
+
+
 def _find_title(text: str) -> str:
-    """Extract a compact event name from an Instagram caption."""
-    # Prefer an explicit performer/title introduced after common lead-ins.
+    """Extract an event title from common Instagram caption structures."""
+    # Poster-style heading.
+    first = re.split(r"\s{2,}|\n", text, maxsplit=1)[0].strip(" -–—#")
+    if 4 <= len(first) <= 100 and not parse_event_dates(
+        first, default_year=datetime.now().year
+    ) and not TIME_RE.fullmatch(first):
+        if re.search(r"[A-Za-zА-Яа-я]", first):
+            return first
+
+    # Performer / program title.
     explicit = re.search(
         r"\b(?:on our stage|featuring|feat\.?|ft\.?)\s*[:—-]\s*"
         r"([^.!?]+)",
@@ -631,28 +666,6 @@ def _find_title(text: str) -> str:
         if 3 <= len(candidate) <= 100:
             return candidate
 
-    chunks = re.split(r"\s*[|•·]\s*|(?<=[.!?])\s+|\s+—\s+", text)
-    candidates = []
-    for chunk in chunks:
-        candidate = chunk.strip(" -–—#\\n")
-        if not (5 <= len(candidate) <= 160):
-            continue
-        if parse_event_dates(candidate, default_year=datetime.now().year):
-            continue
-        if TIME_RE.fullmatch(candidate):
-            continue
-        if re.fullmatch(r"(?:https?://|www\.)\S+", candidate, re.I):
-            continue
-        candidates.append(candidate)
-
-    # Instagram posters often put the actual event title in all caps.
-    for candidate in candidates:
-        letters = re.findall(r"[A-Za-zА-Яа-я]", candidate)
-        uppercase = re.findall(r"[A-ZА-Я]", candidate)
-        if len(letters) >= 5 and len(uppercase) / len(letters) >= 0.72:
-            return candidate
-
-    # "We're opening the X" / "We are opening the X" is a strong title cue.
     opening = re.search(
         r"\b(?:we['’]re|we are)\s+opening\s+(?:the\s+)?"
         r"([^.!?—:]+)",
@@ -660,11 +673,76 @@ def _find_title(text: str) -> str:
         re.I,
     )
     if opening:
-        candidate = opening.group(1).strip()
+        candidate = re.sub(r"\s+[-–—]\s+.*$", "", opening.group(1).strip())
         if 3 <= len(candidate) <= 100:
             return candidate
 
-    return candidates[0] if candidates else "Instagram event"
+    lead = re.match(
+        r"^(.{4,100}?)(?:\s+at\s+|\s+[-–—:]\s+|\s+join us\b)",
+        text,
+        re.I,
+    )
+    if lead:
+        candidate = lead.group(1).strip(" -–—:#")
+        if not parse_event_dates(candidate, default_year=datetime.now().year):
+            return candidate
+
+    chunks = re.split(r"\s*[|•·]\s*|(?<=[.!?])\s+|\s+—\s+", text)
+    for chunk in chunks:
+        candidate = chunk.strip(" -–—#\\n")
+        if 5 <= len(candidate) <= 160 and not parse_event_dates(
+            candidate, default_year=datetime.now().year
+        ) and not TIME_RE.fullmatch(candidate):
+            if not re.fullmatch(r"(?:https?://|www\.)\S+", candidate, re.I):
+                return candidate
+
+    return "Instagram event"
+
+
+def _find_event_time(text: str) -> str:
+    """Find a time explicitly associated with the event."""
+    match = re.search(
+        r"\b(?:at|from|doors?\s+(?:open|at)|starts?\s+at|kick(?:s|ing)?\s+off\s+at)\s*("
+        + TIME_RE.pattern + r")",
+        text,
+        re.I,
+    )
+    if match:
+        return match.group(1).strip()
+
+    return ""
+
+
+def _find_venue(text: str) -> str:
+    """Extract an explicitly named venue; do not guess from the profile."""
+    match = re.search(r"📍\s*([^\n.!?]{2,100})", text, re.I)
+    if match:
+        return match.group(1).strip(" -–—")
+
+    match = re.search(
+        r"\b(?:at)\s+([A-Z][A-Za-z0-9 .&'_-]{2,70})",
+        text,
+    )
+    if match:
+        return match.group(1).strip(" -–—,")
+
+    return ""
+
+
+def _find_category(text: str) -> str:
+    lowered = text.casefold()
+    categories = (
+        ("Концерты", ("concert", "live music", "live", "band", "dj")),
+        ("Вечеринки", ("party", "night", "oktoberfest")),
+        ("Дегустации", ("tasting", "дегустац")),
+        ("Выставки", ("exhibition", "gallery opening", "выстав")),
+        ("Мастер-классы", ("workshop", "мастер-класс")),
+        ("Маркеты", ("market", "popup", "pop-up", "маркет")),
+    )
+    for category, words in categories:
+        if any(word in lowered for word in words):
+            return category
+    return "События"
 
 
 def _find_city(text: str) -> str:
