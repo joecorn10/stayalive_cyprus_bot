@@ -164,7 +164,7 @@ def _parse_source(source) -> list[dict]:
     if name == "Cyproplan":
         return CyproplanParser().parse()
     if name == "SoldOut TicketBox":
-        return []
+        return SoldOutParser(source["url"]).parse()
     if name == "EventOr":
         return AggregatorParser(source["url"], "EventOr").parse()
     if name == "Cyprus.BZ":
