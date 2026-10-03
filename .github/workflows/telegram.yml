@@ -51,8 +51,30 @@ jobs:
             echo "No database or offset changes to commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: persist bot state"
-          git pull --rebase origin main
-          git push
+
+          # The bot state is shared through git. Retry the rebase/push because
+          # another scheduled worker may have persisted state meanwhile.
+          for attempt in 1 2 3; do
+            git commit -m "chore: persist bot state" || true
+            git pull --rebase origin main || {
+              git rebase --abort || true
+              git reset --soft origin/main
+              echo "Retrying state persistence ($attempt/3)..."
+              sleep 3
+              continue
+            }
+            if git push; then
+              echo "Bot state persisted."
+              exit 0
+            fi
+            echo "Push failed; retrying state persistence ($attempt/3)..."
+            sleep 3
+            git fetch origin main
+            git reset --soft origin/main
+          done
+
+          echo "Could not persist bot state after 3 attempts."
+          exit 1
