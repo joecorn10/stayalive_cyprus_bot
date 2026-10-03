@@ -19,7 +19,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
-from app.sync import canonical_category
+from app.sync import canonical_category, sync_source_by_url
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -347,7 +347,11 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: using daily SQLite snapshot")
+        print("Telegram event request: refreshing Stantar Kkomety, then using SQLite snapshot")
+        try:
+            sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+        except Exception as exc:
+            print(f"Stantar Kkomety refresh failed: {exc}")
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -358,7 +362,11 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: using daily SQLite snapshot")
+        print("Telegram event request: refreshing Stantar Kkomety, then using SQLite snapshot")
+        try:
+            sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+        except Exception as exc:
+            print(f"Stantar Kkomety refresh failed: {exc}")
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
