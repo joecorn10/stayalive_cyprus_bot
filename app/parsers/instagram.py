@@ -733,6 +733,15 @@ def _find_event_time(text: str) -> str:
     if match:
         return match.group(1).strip()
 
+    # Captions often put the time on its own line after the event text.
+    standalone = re.search(
+        r"(?:^|[\\n•·|])\\s*(" + TIME_RE.pattern + r")\\s*(?:$|[\\n•·|])",
+        text,
+        re.I | re.M,
+    )
+    if standalone:
+        return standalone.group(1).strip()
+
     # Common poster format: "September 19 20:30", "OCT 02 • 21:00".
     date_time = re.search(
         r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
@@ -761,6 +770,11 @@ def _find_venue(text: str) -> str:
     )
     if match:
         return match.group(1).strip(" -–—,")
+
+    # Russian captions commonly use "в @venue" for Instagram venues.
+    match = re.search(r"\\bв\\s+@([A-Za-z0-9._-]{2,60})", text, re.I)
+    if match:
+        return "@" + match.group(1)
 
     return ""
 
