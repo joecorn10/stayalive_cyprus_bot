@@ -265,6 +265,8 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
     return chat_id, *format_event_details(get_event(event_id))
 
 
+_SYNC_IN_PROGRESS = False
+
 def handle_message(message: dict) -> tuple[str, dict]:
     init_db()
     text = (message.get("text") or "").strip()
@@ -285,10 +287,17 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         return format_status(), main_menu()
 
+    global _SYNC_IN_PROGRESS
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        print("On-demand event sync: today")
-        sync_all()
+        if _SYNC_IN_PROGRESS:
+            return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
+        _SYNC_IN_PROGRESS = True
+        try:
+            print("On-demand event sync: today")
+            sync_all()
+        finally:
+            _SYNC_IN_PROGRESS = False
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -299,8 +308,14 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        print("On-demand event sync: week")
-        sync_all()
+        if _SYNC_IN_PROGRESS:
+            return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
+        _SYNC_IN_PROGRESS = True
+        try:
+            print("On-demand event sync: week")
+            sync_all()
+        finally:
+            _SYNC_IN_PROGRESS = False
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
