@@ -149,6 +149,8 @@ def poll_once(token: str) -> bool:
 
     for update in updates:
         update_offset = update["update_id"] + 1
+        chat_id = None
+        progress_message_id = None
         try:
             callback = update.get("callback_query")
             if callback:
@@ -239,8 +241,6 @@ def poll_once(token: str) -> bool:
                                     )
                         else:
                             needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
-                            progress_message_id = None
-
                             if needs_sync:
                                 progress_message_id = send_message(
                                     token,
@@ -289,6 +289,21 @@ def poll_once(token: str) -> bool:
                 f"error={exc}",
                 file=sys.stderr,
             )
+        except Exception as exc:
+            print(
+                f"Telegram update failed: update_id={update.get('update_id')} "
+                f"error={exc}",
+                file=sys.stderr,
+            )
+            if chat_id is not None:
+                try:
+                    error_text = "⚠️ Не удалось обработать запрос. Попробуй ещё раз."
+                    if progress_message_id is not None:
+                        edit_message(token, chat_id, progress_message_id, error_text, parse_mode=None)
+                    else:
+                        send_message(token, chat_id, error_text, parse_mode=None)
+                except Exception as notify_exc:
+                    print(f"Telegram error notification failed: {notify_exc}", file=sys.stderr)
         finally:
             # Advance Telegram offset even when this update fails. This prevents
             # one broken request from blocking every later update in the batch.
