@@ -18,6 +18,7 @@ from app.database import (
 )
 from app.keyboards import main_menu
 from app.source_detector import detect_source, normalize_url
+from app.sync import sync_all
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -261,12 +262,16 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
+        print("On-demand event sync: today")
+        sync_all()
         today = cyprus_today()
         text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()))
         return text, keyboard or main_menu()
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
+        print("On-demand event sync: week")
+        sync_all()
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
