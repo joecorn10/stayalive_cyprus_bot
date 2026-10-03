@@ -85,3 +85,5 @@ Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=
 
 report["html_matches"]["raw_russian_html"] = resp.text[max(0, resp.text.find("Русский Стендап")-2500):resp.text.find("Русский Стендап")+1000]
 Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+
+# validate card parser
