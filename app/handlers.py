@@ -220,7 +220,7 @@ def handle_add_source(chat_id: int, text: str) -> str:
 
     url = normalize_url(lines[0])
     if not url:
-        return "Похоже, это не URL 🤔\n\nПришли ссылку вида:\nhttps://example.com"
+        return "Похоже, это не ссылка 🤔\n\nЗдесь принимаются только URL источников — например:\nhttps://instagram.com/etko_limassol"
 
     comment = "\n".join(lines[1:]).strip()
     source = detect_source(url, comment)
@@ -361,9 +361,12 @@ def handle_message(message: dict) -> tuple[str, dict]:
             "Например:\n"
             "https://instagram.com/etko_limassol\n"
             "Хорошие концерты и электронная музыка"
-        ), main_menu()
+        ), main_menu("Вставь ссылку на источник…")
 
     if get_chat_state(chat_id) == "awaiting_source":
-        return handle_add_source(chat_id, text), main_menu()
+        return (
+            handle_add_source(chat_id, text),
+            main_menu("Вставь ссылку на источник…"),
+        )
 
     return "Пока я этого не умею. Используй кнопки ниже 👇", main_menu()
