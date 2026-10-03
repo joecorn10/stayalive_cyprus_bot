@@ -64,6 +64,10 @@ class WebsiteParser(EventParser):
         time_re = re.compile(
             r"^(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*(.+)$"
         )
+        split_time_start_re = re.compile(r"^(\d{1,2}:\d{2})$")
+        split_time_end_re = re.compile(
+            r"^[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*(.+)$"
+        )
         languages = {
             "english", "русский", "greek", "cypriot greek",
             "bosnian · croatian · serbian",
@@ -77,6 +81,7 @@ class WebsiteParser(EventParser):
         events: list[dict] = []
         current_date: str | None = None
         pending: tuple[str, str, str] | None = None
+        pending_start: str | None = None
         ticket_links: list[str] = [
             urljoin(self.url, a.get("href", "").strip())
             for a in soup.find_all("a")
@@ -90,12 +95,29 @@ class WebsiteParser(EventParser):
                 parsed = parse_event_dates(line, default_year=default_year)
                 current_date = parsed[0] if parsed else None
                 pending = None
+                pending_start = None
                 continue
 
             time_match = time_re.match(line)
             if time_match and current_date:
                 pending = time_match.groups()
+                pending_start = None
                 continue
+
+            # Some sites split a schedule row into separate text nodes:
+            # "19:30" followed by "–20:30 · Da Vinci".
+            if current_date and not pending:
+                start_match = split_time_start_re.match(line)
+                if start_match:
+                    pending_start = start_match.group(1)
+                    continue
+                if pending_start:
+                    split_match = split_time_end_re.match(line)
+                    if split_match:
+                        pending = (pending_start, split_match.group(1), split_match.group(2))
+                        pending_start = None
+                        continue
+                    pending_start = None
 
             if not pending or not current_date:
                 continue
@@ -122,6 +144,7 @@ class WebsiteParser(EventParser):
                 "category": _website_category(line),
             })
             pending = None
+            pending_start = None
 
         unique: list[dict] = []
         seen = set()
