@@ -77,8 +77,8 @@ class WebsiteParser(EventParser):
             # Find the nearest preceding date heading in document order. Some
             # React sites render the heading as a div rather than an h2.
             current_date = None
-            for previous_text in node.find_all_previous(string=True):
-                heading = re.sub(r"\s+", " ", str(previous_text)).strip()
+            for previous_tag in node.find_all_previous():
+                heading = re.sub(r"\s+", " ", previous_tag.get_text(" ", strip=True)).strip()
                 if date_re.match(heading):
                     parsed = parse_event_dates(heading, default_year=default_year)
                     current_date = parsed[0] if parsed else None
