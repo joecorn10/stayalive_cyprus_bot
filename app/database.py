@@ -115,7 +115,8 @@ def init_db() -> None:
             seed_sources,
         )
         conn.execute(
-            "UPDATE sources SET enabled = 0 WHERE name = 'More.com Cyprus'"
+            "UPDATE sources SET enabled = 1 WHERE name = 'SoldOut TicketBox'
+        conn.execute("UPDATE sources SET enabled = 0 WHERE name = 'More.com Cyprus'")"
         )
         conn.commit()
 
