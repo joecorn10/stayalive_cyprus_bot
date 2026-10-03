@@ -204,12 +204,11 @@ def format_status() -> str:
         f"🔮 Будущие события: {stats['upcoming']}",
         f"🕐 Последний event seen: {stats['latest_event_seen']}",
         "",
-        "Парсеры:",
-        "🟢 ETKO",
-        "🟢 Cyproplan",
-        "🟢 SoldOut TicketBox",
-        "🟢 Public Telegram",
+        "Активные источники:",
     ]
+    for source in list_sources():
+        if source["enabled"]:
+            lines.append(f"🟢 {source['name']}")
     recent = list_recent_events(5)
     if recent:
         lines += ["", "Последние записи:"]
