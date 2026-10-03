@@ -9,6 +9,7 @@ from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.etko import EtkoParser
 from app.parsers.website import WebsiteParser
+from app.parsers.aggregator import AggregatorParser
 from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
 from app.parsers.soldout import SoldOutParser
 from app.parsers.telegram import TelegramParser
@@ -37,7 +38,13 @@ def _parse_source(source) -> list[dict]:
     if name == "Cyproplan":
         return CyproplanParser().parse()
     if name == "SoldOut TicketBox":
-        return SoldOutParser().parse()
+        return []
+    if name == "EventOr":
+        return AggregatorParser(source["url"], "EventOr").parse()
+    if name == "Cyprus.BZ":
+        return AggregatorParser(source["url"], "Cyprus.BZ").parse()
+    if name == "More.com Cyprus":
+        return AggregatorParser(source["url"], "More.com").parse()
     if source["type"] == "Website":
         return WebsiteParser(source["url"]).parse()
     if source["type"] == "FacebookDiscovery":
