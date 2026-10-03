@@ -236,9 +236,9 @@ def _source_root(url: str) -> str:
         return "https://etkocyprus.com/events"
     if parsed.netloc == "www.soldoutticketbox.com":
         return "https://www.soldoutticketbox.com/en/home"
-    if parsed.netloc == "eventor.com.cy":
+    if parsed.netloc in ("eventor.com.cy", "www.eventor.com.cy"):
         return "https://eventor.com.cy/"
-    if parsed.netloc == "cyprus.bz":
+    if parsed.netloc in ("cyprus.bz", "www.cyprus.bz"):
         return "https://cyprus.bz/"
     if parsed.netloc == "www.more.com" and "/cy-" in parsed.path:
         return "https://www.more.com/cy-en/tickets/"
