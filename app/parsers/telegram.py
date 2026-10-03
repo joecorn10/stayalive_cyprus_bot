@@ -20,6 +20,11 @@ MONTHS_EN = {
     "may": 5, "june": 6, "july": 7, "august": 8,
     "september": 9, "october": 10, "november": 11, "december": 12,
 }
+CYPROPLAN_CITIES = (
+    "Никосия", "Лимасол", "Ларнака", "Пафос", "Паралимни",
+    "Протарас", "Айя-Напа", "Троодос", "Платрес", "Корнос",
+    "Силику", "Аналионтас", "Потамиу", "Махерас",
+)
 
 
 class TelegramParser(EventParser):
@@ -31,37 +36,209 @@ class TelegramParser(EventParser):
     def parse(self) -> list[dict]:
         if not self.channel or self.channel.startswith("+"):
             return []
+
         preview_url = f"https://t.me/s/{self.channel}"
         response = requests.get(preview_url, timeout=20, headers=HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        events = []
-        for message in soup.select(".tgme_widget_message"):
-            body = message.select_one(".tgme_widget_message_text")
-            if not body:
+
+        if self.channel.lower() == "cyproplan":
+            return _parse_cyproplan(soup, self.url)
+
+        return _parse_generic(soup, self.url)
+
+
+def _parse_generic(soup: BeautifulSoup, source_url: str) -> list[dict]:
+    events = []
+    for message in soup.select(".tgme_widget_message"):
+        body = message.select_one(".tgme_widget_message_text")
+        if not body:
+            continue
+        text = " ".join(body.stripped_strings)
+        parsed = _extract_event(text)
+        if not parsed:
+            continue
+        title, date_value, end_date, time_value = parsed
+        link = message.select_one(".tgme_widget_message_date")
+        message_url = link.get("href", source_url) if link else source_url
+        events.append(_event(
+            title, text, date_value, end_date, time_value, "", "",
+            message_url, source_url, "События",
+        ))
+    return events
+
+
+def _parse_cyproplan(soup: BeautifulSoup, source_url: str) -> list[dict]:
+    events = []
+    seen = set()
+
+    for message in soup.select(".tgme_widget_message"):
+        body = message.select_one(".tgme_widget_message_text")
+        if not body:
+            continue
+
+        # Keep line breaks: Cyproplan publishes one event per line.
+        lines = [line.strip() for line in body.get_text("\n").splitlines() if line.strip()]
+        current_city = ""
+        pending_url = ""
+
+        for line in lines:
+            if line.startswith("🇨🇾") or "Команда Cyproplan" in line:
                 continue
-            text = " ".join(body.stripped_strings)
-            parsed = _extract_event(text)
-            if not parsed:
+            if line in ("Никосия", "Лимасол", "Ларнака", "Пафос", "Другие локации"):
+                current_city = "" if line == "Другие локации" else line
                 continue
-            title, date_value, time_value = parsed
-            link = message.select_one(".tgme_widget_message_date")
-            source_url = link.get("href", self.url) if link else self.url
-            events.append({
-                "title": title[:200],
-                "description": text[:2000],
-                "date": date_value,
-                "end_date": date_value,
-                "time": time_value,
-                "venue": "",
-                "city": _extract_city(text),
-                "price": _extract_price(text),
-                "ticket_url": source_url,
-                "source_url": source_url,
-                "image_url": "",
-                "category": "Музыка",
-            })
-        return events
+
+            urls = re.findall(r"https?://[^\s)]+", line)
+            if urls and not re.search(r"\d", line):
+                pending_url = urls[0].rstrip(".,")
+                continue
+
+            date_match = _cyproplan_dates(line)
+            if not date_match:
+                continue
+
+            title, event_url = _cyproplan_title_and_url(body, line)
+            event_url = event_url or pending_url or _message_url(message, source_url)
+            pending_url = ""
+
+            if not title or len(title) < 4:
+                continue
+
+            date_value, end_date = date_match
+            time_value = _extract_time_range(line)
+            key = (title.lower(), date_value, end_date, current_city.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+
+            events.append(_event(
+                title[:200],
+                line,
+                date_value,
+                end_date,
+                time_value,
+                current_city,
+                _infer_category(line),
+                event_url,
+                source_url,
+                _infer_category(line),
+            ))
+
+    return events
+
+
+def _cyproplan_title_and_url(body, line: str) -> tuple[str, str]:
+    # Find the anchor whose visible text belongs to this event line.
+    for anchor in body.find_all("a", href=True):
+        label = " ".join(anchor.stripped_strings)
+        if label and label in line:
+            return _clean_title(line, label), anchor["href"]
+    return _clean_title(line, ""), ""
+
+
+def _clean_title(line: str, anchor_label: str) -> str:
+    text = anchor_label or line
+    text = re.sub(r"^\W+", "", text)
+    text = re.sub(
+        r"\s*(?:\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|"
+        r"(?:до\s+)?\d{1,2}(?:[-–]\d{1,2})?\s+"
+        r"(?:января|февраля|марта|апреля|мая|июня|июля|августа|"
+        r"сентября|октября|ноября|декабря))\b.*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"\s+", " ", text).strip(" .,:—-")
+    return text
+
+
+def _cyproplan_dates(text: str):
+    normalized = text.replace("–", "-").replace("—", "-")
+    month_pattern = (
+        r"(января|февраля|марта|апреля|мая|июня|июля|августа|"
+        r"сентября|октября|ноября|декабря)"
+    )
+
+    # 26 сентября - 4 октября
+    match = re.search(
+        rf"(\d{{1,2}})\s+{month_pattern}\s*(?:,?[^0-9\n]{{0,25}}?)?"
+        rf"(?:-|по)\s*(\d{{1,2}})\s+{month_pattern}",
+        normalized,
+        re.I,
+    )
+    if match:
+        start_day, start_month = int(match.group(1)), MONTHS_RU[match.group(2).lower()]
+        end_day, end_month = int(match.group(3)), MONTHS_RU[match.group(4).lower()]
+        year = datetime.now().year
+        start_year = year
+        end_year = year + (1 if end_month < start_month else 0)
+        return (
+            f"{start_year:04d}-{start_month:02d}-{start_day:02d}",
+            f"{end_year:04d}-{end_month:02d}-{end_day:02d}",
+        )
+
+    # 2-4 октября / 3-4 октября
+    match = re.search(rf"(\d{{1,2}})\s*[-–]\s*(\d{{1,2}})\s+{month_pattern}", normalized, re.I)
+    if match:
+        month = MONTHS_RU[match.group(3).lower()]
+        year = datetime.now().year
+        return (
+            f"{year:04d}-{month:02d}-{int(match.group(1)):02d}",
+            f"{year:04d}-{month:02d}-{int(match.group(2)):02d}",
+        )
+
+    # до 15 октября
+    match = re.search(rf"до\s+(\d{{1,2}})\s+{month_pattern}", normalized, re.I)
+    if match:
+        month = MONTHS_RU[match.group(2).lower()]
+        year = datetime.now().year
+        return (f"{year:04d}-{month:02d}-{int(match.group(1)):02d}", f"{year:04d}-{month:02d}-{int(match.group(1)):02d}")
+
+    # 2 октября
+    match = re.search(rf"\b(\d{{1,2}})\s+{month_pattern}", normalized, re.I)
+    if match:
+        month = MONTHS_RU[match.group(2).lower()]
+        year = datetime.now().year
+        day = int(match.group(1))
+        return (f"{year:04d}-{month:02d}-{day:02d}", f"{year:04d}-{month:02d}-{day:02d}")
+
+    return None
+
+
+def _extract_time_range(text: str) -> str:
+    match = re.search(
+        r"\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*[-–]\s*([01]?\d|2[0-3]):([0-5]\d))?",
+        text,
+    )
+    if not match:
+        return ""
+    start = f"{int(match.group(1)):02d}:{match.group(2)}"
+    if not match.group(3):
+        return start
+    return f"{start}-{int(match.group(3)):02d}:{match.group(4)}"
+
+
+def _message_url(message, source_url: str) -> str:
+    link = message.select_one(".tgme_widget_message_date")
+    return link.get("href", source_url) if link else source_url
+
+
+def _event(title, description, date_value, end_date, time_value, city, category, ticket_url, source_url, fallback_category):
+    return {
+        "title": title,
+        "description": description,
+        "date": date_value,
+        "end_date": end_date,
+        "time": time_value,
+        "venue": "",
+        "city": city,
+        "price": _extract_price(description),
+        "ticket_url": ticket_url,
+        "source_url": ticket_url,
+        "image_url": "",
+        "category": category or fallback_category,
+    }
 
 
 def _extract_event(text: str):
@@ -86,20 +263,32 @@ def _extract_event(text: str):
         year = int(match.group(3) or now.year)
         date_value = f"{year:04d}-{month:02d}-{int(match.group(1)):02d}"
     time_match = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
-    time_value = f"{time_match.group(1)}:{time_match.group(2)}" if time_match else ""
+    time_value = f"{int(time_match.group(1)):02d}:{time_match.group(2)}" if time_match else ""
     title = re.split(r"\b(?:\d{1,2}[./-]\d{1,2}|\d{1,2}\s+[А-Яа-я]+|\d{1,2}\s+[A-Za-z]+)\b", text, maxsplit=1)[0].strip(" —:-")
     if len(title) < 4:
         title = text[:120]
-    return title, date_value, time_value
-
-
-def _extract_city(text: str) -> str:
-    for city in ("Limassol", "Nicosia", "Larnaca", "Paphos", "Protaras", "Ayia Napa"):
-        if city.lower() in text.lower():
-            return city
-    return ""
+    return title, date_value, date_value, time_value
 
 
 def _extract_price(text: str) -> str:
     match = re.search(r"(?:€|EUR)\s*\d+(?:[.,]\d+)?", text, re.I)
     return match.group(0) if match else ""
+
+
+def _infer_category(text: str) -> str:
+    lower = text.lower()
+    if any(x in lower for x in ("concert", "концерт", "джаз", "soul", "music", "музык")):
+        return "Музыка"
+    if any(x in lower for x in ("театр", "спектакл", "comedy", "комеди")):
+        return "Театр"
+    if any(x in lower for x in ("выстав", "art ", "арт-", "галере")):
+        return "Искусство"
+    if any(x in lower for x in ("фестиваль", "festival", "comic con")):
+        return "Фестиваль"
+    if any(x in lower for x in ("wine", "вино", "пив", "beer", "гастроном")):
+        return "Еда и напитки"
+    if any(x in lower for x in ("турнир", "забег", "спорт", "теннис")):
+        return "Спорт"
+    if any(x in lower for x in ("детск", "детский")):
+        return "Для детей"
+    return "События"
