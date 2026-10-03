@@ -1,6 +1,7 @@
 """Telegram update handlers."""
 
 from datetime import datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from app.config import TIMEZONE
@@ -76,16 +77,6 @@ def _category_icon(category: str) -> str:
     return "✨"
 
 
-def _events_keyboard(events) -> dict:
-    buttons = []
-    for event in events[:30]:
-        label = str(event["title"]).strip()
-        if len(label) > 28:
-            label = label[:27].rstrip() + "…"
-        buttons.append([{"text": f"ℹ️ {label}", "callback_data": f"event:{event['id']}"}])
-    return {"inline_keyboard": buttons}
-
-
 def format_events(
     title: str,
     events,
@@ -150,25 +141,26 @@ def format_events(
             lines.append("📚 " + " · ".join(names))
         lines.append("")
 
-    return "\n".join(lines).rstrip(), _events_keyboard(events)
+    return "\n".join(lines).rstrip(), None
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
     if not event:
         return "Не нашёл это событие. Возможно, оно уже исчезло из источника.", None
 
-    lines = [f"{_category_icon(event['category'])} {event['title']}", ""]
+    title = escape(str(event["title"]))
+    lines = [f"{_category_icon(event['category'])} {title}", ""]
     lines.append(f"📅 {_date_label(event['date'])}")
     if event["end_date"] and event["end_date"] != event["date"]:
         lines.append(f"↳ до {_date_label(event['end_date'])}")
     if event["time"]:
-        lines.append(f"🕐 {event['time']}")
+        lines.append(f"🕐 {escape(str(event['time']))}")
     if event["venue"]:
-        lines.append(f"📍 {event['venue']}")
+        lines.append(f"📍 {escape(str(event['venue']))}")
     elif event["city"]:
-        lines.append(f"📍 {event['city']}")
+        lines.append(f"📍 {escape(str(event['city']))}")
     if event["price"]:
-        lines.append(f"💶 {event['price']}")
+        lines.append(f"💶 {escape(str(event['price']))}")
 
     sources = list_event_sources(event["id"])
     if sources:
@@ -176,13 +168,17 @@ def format_event_details(event) -> tuple[str, dict | None]:
         for source in sources:
             if source["name"] not in names:
                 names.append(source["name"])
-        lines.append(f"📚 {' · '.join(names)}")
+        lines.append(f"📚 {escape(' · '.join(names))}")
+
+    source_url = str(event.get("source_url") or "").strip()
+    if source_url:
+        lines.append(f'🔗 <a href="{escape(source_url, quote=True)}">Источник события</a>')
 
     if event["description"]:
         description = " ".join(str(event["description"]).split())
         if len(description) > 1200:
             description = description[:1197].rstrip() + "…"
-        lines.extend(["", description])
+        lines.extend(["", escape(description)])
 
     keyboard = None
     if event["ticket_url"]:
