@@ -55,3 +55,22 @@ Path("data/stantar_diagnostic.json").write_text(
 print(json.dumps(report, ensure_ascii=False, indent=2))
 
 # trigger diagnostic
+
+
+# Raw HTML shape diagnostics
+import requests
+from bs4 import BeautifulSoup
+resp = requests.get(URL, timeout=20, headers={"User-Agent": "StayAliveCyprusBot/1.0"})
+soup = BeautifulSoup(resp.text, "html.parser")
+raw_text = soup.get_text("\n")
+report["http"] = {"status": resp.status_code, "content_length": len(resp.text)}
+report["html_matches"] = {
+    "october_lines": [x.strip() for x in raw_text.splitlines() if "October" in x][:30],
+    "time_lines": [x.strip() for x in raw_text.splitlines() if "19:30" in x][:30],
+    "russian_lines": [x.strip() for x in raw_text.splitlines() if "Русский" in x][:30],
+}
+Path("data/stantar_diagnostic.json").write_text(
+    json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+)
+print(json.dumps(report["http"], ensure_ascii=False))
+print(json.dumps(report["html_matches"], ensure_ascii=False, indent=2))
