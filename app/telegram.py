@@ -83,6 +83,52 @@ def save_offset(offset: int) -> None:
     STATE_PATH.write_text(json.dumps({"offset": offset}, indent=2) + "\n", encoding="utf-8")
 
 
+def configure_telegram_menu(token: str) -> None:
+    """Configure the bot profile and visible Telegram command menu."""
+    api_call(
+        token,
+        "setMyDescription",
+        {
+            "description": (
+                "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
+                "События на Кипре: концерты, выставки, вечеринки, "
+                "дегустации, маркеты и другие причины выйти из дома.\n\n"
+                "Нажми Start, чтобы открыть бота."
+            )
+        },
+    )
+    api_call(
+        token,
+        "setMyShortDescription",
+        {
+            "short_description": (
+                "События на Кипре: концерты, искусство, "
+                "вечеринки, еда и другие планы."
+            )
+        },
+    )
+    api_call(
+        token,
+        "setMyCommands",
+        {
+            "commands": [
+                {"command": "start", "description": "Открыть Stay Alive Cyprus"},
+                {"command": "today", "description": "События сегодня"},
+                {"command": "week", "description": "События на этой неделе"},
+                {"command": "sources", "description": "Источники"},
+                {"command": "add", "description": "Добавить источник"},
+                {"command": "status", "description": "Статус бота"},
+            ]
+        },
+    )
+    api_call(
+        token,
+        "setChatMenuButton",
+        {"menu_button": {"type": "commands"}},
+    )
+    print("Telegram profile and menu configured.")
+
+
 def telegram_diagnostics(token: str) -> None:
     me = api_call(token, "getMe").get("result", {})
     webhook = api_call(token, "getWebhookInfo").get("result", {})
