@@ -78,3 +78,5 @@ print(json.dumps(report["html_matches"], ensure_ascii=False, indent=2))
 idx = raw_text.find("Русский Стендап")
 report["html_matches"]["around_russian"] = raw_text.splitlines()[max(0, len(raw_text[:idx].splitlines())-8):len(raw_text[:idx].splitlines())+4]
 Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+
+# trigger after parser fix
