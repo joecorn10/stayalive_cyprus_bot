@@ -21,20 +21,39 @@ from app.translator import translate_event
 logger = logging.getLogger(__name__)
 
 
+CATEGORY_RULES = (
+    ("🎵 Музыка", re.compile(r"\b(concert|live|music|dj|djs|band|gig|singer|pianist|музык|концерт|диджей|ди-джей|группа|певец|джаз|techno|house)\b", re.I)),
+    ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|дегустац|вино|ужин|еда|шеф|ресторан|вин|гастроном)\b", re.I)),
+    ("🎨 Искусство", re.compile(r"\b(art|gallery|exhibition|opening|museum|painting|sculpture|искусств|выстав|галере|музе|живопис|скульптур|фото)\b", re.I)),
+    ("🪩 Nightlife", re.compile(r"\b(party|club|night|rave|disco|nightlife|вечерин|клуб|рейв|ночь|танц)\b", re.I)),
+    ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|театр|кино|фильм|показ|спектакл)\b", re.I)),
+    ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|masterclass|class|seminar|lecture|course|мастер[- ]?класс|воркшоп|семинар|лекци|курс|занят)\b", re.I)),
+    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|йог|фитнес|футбол|баскетбол|велопрогул|спорт)\b", re.I)),
+    ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
+    ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|children|family|families|дет|семейн|для детей)\b", re.I)),
+    ("🎪 Фестивали", re.compile(r"\b(festival|фестиваль|карнавал|carnival)\b", re.I)),
+)
+
+def classify_event(event: dict) -> str:
+    explicit = str(event.get("category") or "").strip()
+    if explicit and explicit not in {"События", "Events"}:
+        return explicit
+    text = " ".join(str(event.get(key, "")) for key in ("title", "description", "venue", "city"))
+    for category, pattern in CATEGORY_RULES:
+        if pattern.search(text):
+            return category
+    return "✨ Другое"
+
 def _normalize(events: list[dict]) -> list[dict]:
     normalized = []
     for event in events:
         normalize_event_dates(event)
         translate_event(event)
-        raw = "|".join(
-            str(event.get(key, "")).strip().lower()
-            for key in ("title", "date", "end_date", "time", "venue", "city")
-        )
+        event["category"] = classify_event(event)
+        raw = "|".join(str(event.get(key, "")).strip().lower() for key in ("title", "date", "end_date", "time", "venue", "city", "category"))
         event["content_hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        event.setdefault("category", "События")
         normalized.append(event)
     return normalized
-
 
 def _parse_source(source) -> list[dict]:
     name = source["name"]
