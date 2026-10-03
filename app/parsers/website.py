@@ -169,7 +169,7 @@ class WebsiteParser(EventParser):
 
 def _website_category(text: str) -> str:
     value = str(text or "")
-    if re.search(r"(?i)\\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комеди|юмор)\\b", value):
+    if re.search(r"(?i)\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комеди|юмор)\b", value):
         return "🎭 Comedy"
     return "События"
 
