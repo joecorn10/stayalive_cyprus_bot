@@ -36,6 +36,7 @@ jobs:
         run: python -m app.telegram_worker
 
       - name: Save database and Telegram offset
+        if: always()
         run: |
           if [ -f events.db ]; then
             git add events.db
