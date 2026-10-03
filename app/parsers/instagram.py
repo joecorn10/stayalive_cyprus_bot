@@ -1,9 +1,8 @@
 """Instagram public-profile event parser.
 
-Use the public profile HTML instead of Instaloader's internal API. Instagram
-currently rate-limits the internal web_profile_info endpoint aggressively from
-GitHub Actions, so the parser only uses the normal public profile request and
-extracts post captions/URLs from the returned HTML.
+Use the public profile HTML when available, with Apify as the primary fallback
+when GitHub Actions hits Instagram's login wall or rate limit. Internal API
+and Jina Reader remain secondary fallbacks.
 """
 
 import html
@@ -151,7 +150,7 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
     final_path = urlparse(response.url).path.lower()
     if response.status_code != 200:
         logger.warning(
-            "Instagram profile returned HTTP %s for %s; trying internal API fallback",
+            "Instagram profile returned HTTP %s for %s; trying Apify fallback",
             response.status_code,
             profile_url,
         )
