@@ -33,4 +33,5 @@ jobs:
       - name: Run Instagram diagnostic
         env:
           INSTAGRAM_DIAGNOSTIC_URL: ${{ inputs.url || 'https://www.instagram.com/zebra_limassol/' }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
         run: python -m app.instagram_diagnostic
