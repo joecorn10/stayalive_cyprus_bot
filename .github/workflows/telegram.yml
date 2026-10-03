@@ -34,11 +34,16 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Run Telegram worker
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.telegram_worker
 
       - name: Save database and Telegram offset
