@@ -327,7 +327,7 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         return format_status(), main_menu()
 
-        if text == "📅 Сегодня":
+    if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
         print("Telegram event request: using daily SQLite snapshot")
         today = cyprus_today()
