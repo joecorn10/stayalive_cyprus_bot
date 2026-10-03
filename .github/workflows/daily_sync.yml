@@ -2,6 +2,13 @@ name: Daily event sync
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/parsers/**"
+      - "app/date_utils.py"
+      - "app/sync.py"
   schedule:
     # 03:00 UTC = 06:00 Cyprus during summer time, 05:00 during winter time.
     - cron: "0 3 * * *"
