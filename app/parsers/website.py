@@ -146,6 +146,20 @@ class WebsiteParser(EventParser):
                 str(a.get("aria-label") or "") for a in card.find_all("a")
             )
             date_match = date_re.search(aria_text)
+
+            # Stantar's Russian cards do not always repeat the date in the
+            # ticket aria-label. The date is rendered in the nearest
+            # preceding day heading, so walk backwards through the DOM.
+            if not date_match:
+                for previous_tag in card.find_all_previous():
+                    previous_text = re.sub(
+                        r"\\s+", " ", previous_tag.get_text(" ", strip=True)
+                    ).strip()
+                    previous_match = date_re.search(previous_text)
+                    if previous_match:
+                        date_match = previous_match
+                        break
+
             if not date_match:
                 continue
 
