@@ -129,23 +129,34 @@ def _parse_event_page(session: requests.Session, url: str) -> dict | None:
 
 
 def _json_ld(soup: BeautifulSoup) -> dict:
+    """Return the first Event object, including JSON-LD @graph wrappers."""
     for node in soup.select('script[type="application/ld+json"]'):
         raw = node.string or node.get_text()
         try:
             data = json.loads(raw)
         except (TypeError, json.JSONDecodeError):
             continue
-        candidates = data if isinstance(data, list) else [data]
+
+        candidates = []
+        if isinstance(data, list):
+            candidates.extend(data)
+        elif isinstance(data, dict):
+            candidates.append(data)
+            graph = data.get("@graph")
+            if isinstance(graph, list):
+                candidates.extend(graph)
+
         for item in candidates:
-            if isinstance(item, dict) and (
-                item.get("@type") == "Event"
-                or "startDate" in item
-                or "event" in item
-            ):
+            if not isinstance(item, dict):
+                continue
+            event_type = item.get("@type")
+            types = event_type if isinstance(event_type, list) else [event_type]
+            if "Event" in types or "startDate" in item:
                 return item
+            nested = item.get("event")
+            if isinstance(nested, dict):
+                return nested
     return {}
-
-
 def _meta(soup: BeautifulSoup, name: str) -> str:
     node = soup.find("meta", attrs={"property": name}) or soup.find(
         "meta", attrs={"name": name}
@@ -162,49 +173,80 @@ def _heading(soup: BeautifulSoup) -> str:
 
 
 def _extract_dates(soup: BeautifulSoup, structured: dict, text: str):
+    """Extract an inclusive event date range from structured or visible page data."""
     start = structured.get("startDate")
     end = structured.get("endDate")
+    if isinstance(start, dict):
+        start = start.get("startDate") or start.get("date")
+    if isinstance(end, dict):
+        end = end.get("endDate") or end.get("date")
     if start:
         parsed = _iso_date(start)
         if parsed:
             return parsed, _iso_date(end) or parsed
 
-    # Cyproplan pages currently expose ranges such as:
-    # "Sep 30 (Wed) - Oct 4 (Sun)".
-    month = r"(January|February|March|April|May|June|July|August|September|October|November|December)"
-    range_match = re.search(
-        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\s*"
-        rf"(?:\([^)]*\))?\s*[-–]\s*"
-        rf"{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?",
-        text,
-        re.I,
-    )
-    if range_match:
-        year = datetime.now().year
-        sm = MONTHS[range_match.group(1).lower()]
-        em = MONTHS[range_match.group(3).lower()]
-        sy = year
-        ey = year + (1 if em < sm else 0)
-        return (
-            f"{sy:04d}-{sm:02d}-{int(range_match.group(2)):02d}",
-            f"{ey:04d}-{em:02d}-{int(range_match.group(4)):02d}",
-        )
+    year = datetime.now().year
+    month = r"(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    month_map = {**MONTHS, "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6,
+                 "jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12}
 
-    single = re.search(
-        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b",
-        text,
-        re.I,
+    # Search the whole page, but support all common Cyproplan range layouts.
+    candidate = text.replace("–", "-").replace("—", "-")
+
+    match = re.search(
+        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\s*"
+        rf"(?:\([^)]*\))?\s*-\s*"
+        rf"{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b",
+        candidate, re.I,
     )
-    if single:
-        year = datetime.now().year
-        m = MONTHS[single.group(1).lower()]
-        d = int(single.group(2))
-        value = f"{year:04d}-{m:02d}-{d:02d}"
+    if match:
+        sm = month_map[match.group(1).lower()]
+        em = month_map[match.group(3).lower()]
+        ey = year + (1 if em < sm else 0)
+        return f"{year:04d}-{sm:02d}-{int(match.group(2)):02d}", f"{ey:04d}-{em:02d}-{int(match.group(4)):02d}"
+
+    match = re.search(
+        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\s*-\s*(\d{{1,2}})(?:st|nd|rd|th)?\b",
+        candidate, re.I,
+    )
+    if match:
+        m = month_map[match.group(1).lower()]
+        return f"{year:04d}-{m:02d}-{int(match.group(2)):02d}", f"{year:04d}-{m:02d}-{int(match.group(3)):02d}"
+
+    match = re.search(
+        rf"\b(\d{{1,2}})\s+{month}\s*-\s*(\d{{1,2}})\s+{month}\b",
+        candidate, re.I,
+    )
+    if match:
+        sm = month_map[match.group(2).lower()]
+        em = month_map[match.group(4).lower()]
+        ey = year + (1 if em < sm else 0)
+        return f"{year:04d}-{sm:02d}-{int(match.group(1)):02d}", f"{ey:04d}-{em:02d}-{int(match.group(3)):02d}"
+
+    match = re.search(
+        rf"\b(\d{{1,2}})\s*-\s*(\d{{1,2}})\s+{month}\b",
+        candidate, re.I,
+    )
+    if match:
+        m = month_map[match.group(3).lower()]
+        return f"{year:04d}-{m:02d}-{int(match.group(1)):02d}", f"{year:04d}-{m:02d}-{int(match.group(2)):02d}"
+
+    match = re.search(
+        rf"\b{month}\s+(\d{{1,2}})\s*-\s*(\d{{1,2}})\b",
+        candidate, re.I,
+    )
+    if match:
+        m = month_map[match.group(1).lower()]
+        return f"{year:04d}-{m:02d}-{int(match.group(2)):02d}", f"{year:04d}-{m:02d}-{int(match.group(3)):02d}"
+
+    # Single date fallback.
+    match = re.search(rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b", candidate, re.I)
+    if match:
+        m = month_map[match.group(1).lower()]
+        value = f"{year:04d}-{m:02d}-{int(match.group(2)):02d}"
         return value, value
 
     return None, None
-
-
 def _iso_date(value: str | None) -> str | None:
     if not value:
         return None
