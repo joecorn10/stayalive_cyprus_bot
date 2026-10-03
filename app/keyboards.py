@@ -14,6 +14,7 @@ def main_menu(input_field_placeholder: str = "Выбери действие…")
 def category_slug(category: str) -> str:
     mapping = {
         "🎵 Музыка": "music",
+        "🎭 Comedy": "comedy",
         "🍷 Еда и вино": "food",
         "🎨 Искусство": "art",
         "🪩 Nightlife": "nightlife",
