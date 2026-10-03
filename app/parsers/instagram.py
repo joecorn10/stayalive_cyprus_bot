@@ -171,7 +171,20 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         )
         return _fetch_via_apify(profile_url) or _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
-    return _extract_posts(response.text, profile_url)
+    posts = _extract_posts(response.text, profile_url)
+    if posts:
+        return posts
+
+    logger.warning(
+        "Instagram returned HTTP 200 but no posts were extracted for %s; "
+        "trying Apify fallback",
+        profile_url,
+    )
+    return (
+        _fetch_via_apify(profile_url)
+        or _fetch_via_mobile_api(profile_url)
+        or _fetch_via_reader(profile_url)
+    )
 
 
 def _fetch_via_apify(profile_url: str) -> list[dict] | None:
