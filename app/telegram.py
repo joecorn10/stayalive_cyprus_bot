@@ -172,10 +172,6 @@ def poll_once(token: str) -> bool:
                         f"text_len={len(reply_text or '')}"
                     )
                     if reply_chat_id is not None:
-                        # Always send the callback result as a fresh message.
-                        # Editing the previous inline-keyboard message can fail or
-                        # appear unchanged in Telegram clients, making a healthy
-                        # callback look like a dead button.
                         sent_id = send_message(
                             token,
                             reply_chat_id,
@@ -187,6 +183,19 @@ def poll_once(token: str) -> bool:
                             f"Telegram callback response sent: chat_id={reply_chat_id} "
                             f"message_id={sent_id}"
                         )
+                except Exception as exc:
+                    print(f"Telegram callback failed for data={data!r}: {exc}", file=sys.stderr)
+                    try:
+                        api_call(
+                            token,
+                            "answerCallbackQuery",
+                            {
+                                "callback_query_id": callback_id,
+                                "text": "Не удалось открыть. Попробуй ещё раз.",
+                            },
+                        )
+                    except Exception:
+                        pass
             else:
                 message = update.get("message")
                 if not message:
