@@ -146,340 +146,154 @@ def poll_once(token: str) -> bool:
         print("Telegram update ids:", [update.get("update_id") for update in updates])
     if not updates:
         return False
-    latest_offset = offset
+
     for update in updates:
-        latest_offset = update["update_id"] + 1
-        # Isolate each Telegram update: one broken request must never stop the batch.
+        update_offset = update["update_id"] + 1
         try:
-                callback = update.get("callback_query")
-                if callback:
-                    callback_id = callback.get("id")
-                    data = (callback.get("data") or "").strip()
-                    message = callback.get("message") or {}
-                    callback_chat_id = (message.get("chat") or {}).get("id")
-                    message_id = message.get("message_id")
-                    print(
-                        "Telegram callback: "
-                        f"id={callback_id} chat_id={callback_chat_id} "
-                        f"message_id={message_id} data={data!r}"
-                    )
+            callback = update.get("callback_query")
+            if callback:
+                callback_id = callback.get("id")
+                data = (callback.get("data") or "").strip()
+                message = callback.get("message") or {}
+                chat_id = (message.get("chat") or {}).get("id")
+                message_id = message.get("message_id")
+                print(
+                    "Telegram callback: "
+                    f"id={callback_id} chat_id={chat_id} "
+                    f"message_id={message_id} data={data!r}"
+                )
+                try:
+                    reply_chat_id, reply_text, keyboard = handle_callback(callback)
+                    api_call(token, "answerCallbackQuery", {"callback_query_id": callback_id})
+                    if reply_chat_id is not None:
+                        if message_id is not None:
+                            try:
+                                edit_message(token, reply_chat_id, message_id, reply_text, keyboard)
+                            except Exception as edit_exc:
+                                print(f"Telegram callback edit failed: {edit_exc}", file=sys.stderr)
+                                try:
+                                    delete_message(token, reply_chat_id, message_id)
+                                except Exception as delete_exc:
+                                    print(f"Telegram callback stale-message delete failed: {delete_exc}", file=sys.stderr)
+                                send_message(token, reply_chat_id, reply_text, keyboard)
+                        else:
+                            send_message(token, reply_chat_id, reply_text, keyboard)
+                except Exception as exc:
+                    print(f"Telegram callback failed for data={data!r}: {exc}", file=sys.stderr)
                     try:
-                        chat_id, reply_text, keyboard = handle_callback(callback)
                         api_call(
                             token,
                             "answerCallbackQuery",
-                            {"callback_query_id": callback_id},
+                            {
+                                "callback_query_id": callback_id,
+                                "text": "Не удалось открыть. Попробуй ещё раз.",
+                            },
                         )
-                        if chat_id is not None:
-                            if message_id is not None:
-                                try:
-                                    edit_message(
-                                        token,
-                                        chat_id,
-                                        message_id,
-                                        reply_text,
-                                        keyboard,
-                                    )
-                                    print(
-                                        "Telegram callback handled by editing message: "
-                                        f"chat_id={chat_id} message_id={message_id}"
-                                    )
-                                except Exception as edit_exc:
-                                    print(
-                                        f"Telegram callback edit failed: {edit_exc}",
-                                        file=sys.stderr,
-                                    )
-                                    try:
-                                        delete_message(token, chat_id, message_id)
-                                    except Exception as delete_exc:
-                                        print(
-                                            f"Telegram callback stale-message delete failed: {delete_exc}",
-                                            file=sys.stderr,
-                                        )
-                                    send_message(token, chat_id, reply_text, keyboard)
-                            else:
-                                send_message(token, chat_id, reply_text, keyboard)
-                    except Exception as exc:
-                        print(
-                            f"Telegram callback failed for data={data!r}: {exc}",
-                            file=sys.stderr,
-                        )
-                        try:
-                            api_call(
-                                token,
-                                "answerCallbackQuery",
-                                {
-                                    "callback_query_id": callback_id,
-                                    "text": "Не удалось открыть. Попробуй ещё раз.",
-                                },
-                            )
-                        except Exception:
-                            pass
-                    continue
-
+                    except Exception:
+                        pass
+            else:
                 message = update.get("message")
                 if not message:
                     print(f"Telegram update {update.get('update_id')} has no message/callback")
-                    continue
-                print(
-                    f"Telegram message: update_id={update.get('update_id')}, "
-                    f"chat_id={(message.get('chat') or {}).get('id')}, "
-                    f"text={message.get('text', '')!r}"
-                )
-                chat_id = (message.get("chat") or {}).get("id")
-                if chat_id is None:
-                    continue
-
-                text = (message.get("text") or "").strip()
-                if text.split("@", 1)[0] == "/pins" and (message.get("chat") or {}).get("type") in ("group", "supergroup"):
-                    source_url = "https://t.me/+0C0Mu-Xz4HAxMGNi"
-                    source = get_source_by_url(source_url)
-                    if not source:
-                        send_message(token, chat_id, "Источник закрепов не найден в базе.", parse_mode=None)
-                        continue
-
-                    comment = source["comment"] or ""
-                    import re
-                    if re.search(r"chat_id=-?\d+", comment):
-                        comment = re.sub(r"chat_id=-?\d+", f"chat_id={chat_id}", comment)
-                    else:
-                        comment = f"{comment}; chat_id={chat_id}"
-                    update_source_comment(source_url, comment)
-
-                    try:
-                        added = sync_pinned_telegram_chat(token, chat_id, source_url)
-                        send_message(
-                            token,
-                            chat_id,
-                            f"📌 Закреп проверен. Новых событий: {added}.\n\nТеперь этот чат можно обновлять автоматически.",
-                            parse_mode=None,
-                        )
-                    except Exception as exc:
-                        send_message(
-                            token,
-                            chat_id,
-                            f"❌ Не удалось прочитать закреп: {exc}",
-                            parse_mode=None,
-                        )
-                    continue
-
-                needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
-
-                progress_message_id = None
-                if needs_sync:
-                    progress_message_id = send_message(
-                        token,
-                        chat_id,
-                        "🔎 Ищу свежие события…\n\nПроверяю источники, это займёт несколько секунд.",
-                        parse_mode=None,
-                    )
-
-                reply_text, keyboard = handle_message(message)
-
-                if needs_sync and progress_message_id is not None:
-                    try:
-                        edit_message(
-                            token,
-                            chat_id,
-                            progress_message_id,
-                            reply_text,
-                            keyboard,
-                            parse_mode=None,
-                        )
-                    except Exception as exc:
-                        print(
-                            f"Telegram edit failed, sending result separately: {exc}",
-                            file=sys.stderr,
-                        )
-                        try:
-                            send_message(
-                                token,
-                                chat_id,
-                                reply_text,
-                                keyboard,
-                                parse_mode=None,
-                            )
-                        except Exception as send_exc:
-                            print(
-                                f"Telegram fallback send failed: {send_exc}",
-                                file=sys.stderr,
-                            )
                 else:
-                    send_message(token, chat_id, reply_text, keyboard)
-            for update in updates:
-                latest_offset = update["update_id"] + 1
-                # Isolate each Telegram update: one broken request must never stop the batch.
-                try:
-                        callback = update.get("callback_query")
-                        if callback:
-                            callback_id = callback.get("id")
-                            data = (callback.get("data") or "").strip()
-                            message = callback.get("message") or {}
-                            callback_chat_id = (message.get("chat") or {}).get("id")
-                            message_id = message.get("message_id")
-                            print(
-                                "Telegram callback: "
-                                f"id={callback_id} chat_id={callback_chat_id} "
-                                f"message_id={message_id} data={data!r}"
-                            )
-                            try:
-                                chat_id, reply_text, keyboard = handle_callback(callback)
-                                api_call(
-                                    token,
-                                    "answerCallbackQuery",
-                                    {"callback_query_id": callback_id},
-                                )
-                                if chat_id is not None:
-                                    if message_id is not None:
-                                        try:
-                                            edit_message(
-                                                token,
-                                                chat_id,
-                                                message_id,
-                                                reply_text,
-                                                keyboard,
-                                            )
-                                            print(
-                                                "Telegram callback handled by editing message: "
-                                                f"chat_id={chat_id} message_id={message_id}"
-                                            )
-                                        except Exception as edit_exc:
-                                            print(
-                                                f"Telegram callback edit failed: {edit_exc}",
-                                                file=sys.stderr,
-                                            )
-                                            try:
-                                                delete_message(token, chat_id, message_id)
-                                            except Exception as delete_exc:
-                                                print(
-                                                    f"Telegram callback stale-message delete failed: {delete_exc}",
-                                                    file=sys.stderr,
-                                                )
-                                            send_message(token, chat_id, reply_text, keyboard)
-                                    else:
-                                        send_message(token, chat_id, reply_text, keyboard)
-                            except Exception as exc:
-                                print(
-                                    f"Telegram callback failed for data={data!r}: {exc}",
-                                    file=sys.stderr,
-                                )
-                                try:
-                                    api_call(
-                                        token,
-                                        "answerCallbackQuery",
-                                        {
-                                            "callback_query_id": callback_id,
-                                            "text": "Не удалось открыть. Попробуй ещё раз.",
-                                        },
-                                    )
-                                except Exception:
-                                    pass
-                            continue
-
-                        message = update.get("message")
-                        if not message:
-                            print(f"Telegram update {update.get('update_id')} has no message/callback")
-                            continue
-                        print(
-                            f"Telegram message: update_id={update.get('update_id')}, "
-                            f"chat_id={(message.get('chat') or {}).get('id')}, "
-                            f"text={message.get('text', '')!r}"
-                        )
-                        chat_id = (message.get("chat") or {}).get("id")
-                        if chat_id is None:
-                            continue
-
+                    print(
+                        f"Telegram message: update_id={update.get('update_id')}, "
+                        f"chat_id={(message.get('chat') or {}).get('id')}, "
+                        f"text={message.get('text', '')!r}"
+                    )
+                    chat_id = (message.get("chat") or {}).get("id")
+                    if chat_id is not None:
                         text = (message.get("text") or "").strip()
-                        if text.split("@", 1)[0] == "/pins" and (message.get("chat") or {}).get("type") in ("group", "supergroup"):
+
+                        if (
+                            text.split("@", 1)[0] == "/pins"
+                            and (message.get("chat") or {}).get("type") in ("group", "supergroup")
+                        ):
                             source_url = "https://t.me/+0C0Mu-Xz4HAxMGNi"
                             source = get_source_by_url(source_url)
                             if not source:
                                 send_message(token, chat_id, "Источник закрепов не найден в базе.", parse_mode=None)
-                                continue
-
-                            comment = source["comment"] or ""
-                            import re
-                            if re.search(r"chat_id=-?\d+", comment):
-                                comment = re.sub(r"chat_id=-?\d+", f"chat_id={chat_id}", comment)
                             else:
-                                comment = f"{comment}; chat_id={chat_id}"
-                            update_source_comment(source_url, comment)
-
-                            try:
-                                added = sync_pinned_telegram_chat(token, chat_id, source_url)
-                                send_message(
-                                    token,
-                                    chat_id,
-                                    f"📌 Закреп проверен. Новых событий: {added}.\n\nТеперь этот чат можно обновлять автоматически.",
-                                    parse_mode=None,
-                                )
-                            except Exception as exc:
-                                send_message(
-                                    token,
-                                    chat_id,
-                                    f"❌ Не удалось прочитать закреп: {exc}",
-                                    parse_mode=None,
-                                )
-                            continue
-
-                        needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
-
-                        progress_message_id = None
-                        if needs_sync:
-                            progress_message_id = send_message(
-                                token,
-                                chat_id,
-                                "🔎 Ищу свежие события…\n\nПроверяю источники, это займёт несколько секунд.",
-                                parse_mode=None,
-                            )
-
-                        reply_text, keyboard = handle_message(message)
-
-                        if needs_sync and progress_message_id is not None:
-                            try:
-                                edit_message(
-                                    token,
-                                    chat_id,
-                                    progress_message_id,
-                                    reply_text,
-                                    keyboard,
-                                    parse_mode=None,
-                                )
-                            except Exception as exc:
-                                print(
-                                    f"Telegram edit failed, sending result separately: {exc}",
-                                    file=sys.stderr,
-                                )
+                                comment = source["comment"] or ""
+                                import re
+                                if re.search(r"chat_id=-?\d+", comment):
+                                    comment = re.sub(r"chat_id=-?\d+", f"chat_id={chat_id}", comment)
+                                else:
+                                    comment = f"{comment}; chat_id={chat_id}"
+                                update_source_comment(source_url, comment)
                                 try:
+                                    added = sync_pinned_telegram_chat(token, chat_id, source_url)
                                     send_message(
                                         token,
                                         chat_id,
+                                        f"📌 Закреп проверен. Новых событий: {added}.\n\n"
+                                        "Теперь этот чат можно обновлять автоматически.",
+                                        parse_mode=None,
+                                    )
+                                except Exception as exc:
+                                    send_message(
+                                        token,
+                                        chat_id,
+                                        f"❌ Не удалось прочитать закреп: {exc}",
+                                        parse_mode=None,
+                                    )
+                        else:
+                            needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
+                            progress_message_id = None
+
+                            if needs_sync:
+                                progress_message_id = send_message(
+                                    token,
+                                    chat_id,
+                                    "🔎 Ищу свежие события…\n\n"
+                                    "Проверяю источники, это займёт несколько секунд.",
+                                    parse_mode=None,
+                                )
+
+                            reply_text, keyboard = handle_message(message)
+
+                            if needs_sync and progress_message_id is not None:
+                                try:
+                                    edit_message(
+                                        token,
+                                        chat_id,
+                                        progress_message_id,
                                         reply_text,
                                         keyboard,
                                         parse_mode=None,
                                     )
-                                except Exception as send_exc:
+                                except Exception as exc:
                                     print(
-                                        f"Telegram fallback send failed: {send_exc}",
+                                        f"Telegram edit failed, sending result separately: {exc}",
                                         file=sys.stderr,
                                     )
-                        else:
-                            send_message(token, chat_id, reply_text, keyboard)
-                except Exception as exc:
-                    print(
-                        f"Telegram update failed: update_id={update.get('update_id')} "
-                        f"error={exc}",
-                        file=sys.stderr,
-                    )
-                # Persist progress after every update so a failing update cannot block later messages.
-                save_offset(latest_offset)
-                print(f"Telegram poll: saved offset={latest_offset}")
+                                    try:
+                                        send_message(
+                                            token,
+                                            chat_id,
+                                            reply_text,
+                                            keyboard,
+                                            parse_mode=None,
+                                        )
+                                    except Exception as send_exc:
+                                        print(
+                                            f"Telegram fallback send failed: {send_exc}",
+                                            file=sys.stderr,
+                                        )
+                            else:
+                                send_message(token, chat_id, reply_text, keyboard)
+
         except Exception as exc:
             print(
                 f"Telegram update failed: update_id={update.get('update_id')} "
                 f"error={exc}",
                 file=sys.stderr,
             )
-        # Persist progress after every update so a failing update cannot block later messages.
-        save_offset(latest_offset)
-        print(f"Telegram poll: saved offset={latest_offset}")
+        finally:
+            # Advance Telegram offset even when this update fails. This prevents
+            # one broken request from blocking every later update in the batch.
+            save_offset(update_offset)
+            print(f"Telegram poll: saved offset={update_offset}")
+
+    return True
+
