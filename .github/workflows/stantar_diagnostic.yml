@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "app/diagnostics.py"
+      - "app/parsers/website.py"
 
 permissions:
   contents: write
