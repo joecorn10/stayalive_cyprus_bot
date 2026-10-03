@@ -53,3 +53,5 @@ Path("data/stantar_diagnostic.json").write_text(
     encoding="utf-8",
 )
 print(json.dumps(report, ensure_ascii=False, indent=2))
+
+# trigger diagnostic
