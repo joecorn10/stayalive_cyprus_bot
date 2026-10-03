@@ -79,6 +79,9 @@ def init_db() -> None:
             ("Cyproplan", "https://cyproplan.com/", "Website", "Cyprus event aggregator"),
             ("ETKO Cyprus", "https://etkocyprus.com/events", "Website", "Events, concerts and parties"),
             ("SoldOut TicketBox", "https://www.soldoutticketbox.com/en/home", "Website", "Ticketing and event listings"),
+            ("EventOr", "https://eventor.com.cy/", "Aggregator", "Cyprus-wide event discovery"),
+            ("Cyprus.BZ", "https://cyprus.bz/", "Aggregator", "Cyprus-wide event discovery"),
+            ("More.com Cyprus", "https://www.more.com/cy-en/tickets/", "Aggregator", "Ticketing and event listings"),
             ("Cyprus Journal Music", "https://t.me/cyprusjournalmusic", "Telegram", "Music and events in Cyprus"),
             ("Cyprus Beer Events", "https://t.me/cyprusBeerEvents", "Telegram", "Beer and events in Cyprus"),
             ("Cyproplan Telegram", "https://t.me/cyproplan", "Telegram", "Cyproplan events"),
@@ -92,6 +95,9 @@ def init_db() -> None:
                (name, url, type, comment)
                VALUES (?, ?, ?, ?)""",
             seed_sources,
+        )
+        conn.execute(
+            "UPDATE sources SET enabled = 0 WHERE name = 'SoldOut TicketBox'"
         )
         conn.commit()
 
@@ -230,6 +236,12 @@ def _source_root(url: str) -> str:
         return "https://etkocyprus.com/events"
     if parsed.netloc == "www.soldoutticketbox.com":
         return "https://www.soldoutticketbox.com/en/home"
+    if parsed.netloc == "eventor.com.cy":
+        return "https://eventor.com.cy/"
+    if parsed.netloc == "cyprus.bz":
+        return "https://cyprus.bz/"
+    if parsed.netloc == "www.more.com" and "/cy-" in parsed.path:
+        return "https://www.more.com/cy-en/tickets/"
     if parsed.netloc == "cyproplan.com":
         return "https://cyproplan.com/"
     if parsed.netloc == "t.me":
