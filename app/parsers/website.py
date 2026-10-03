@@ -68,18 +68,22 @@ class WebsiteParser(EventParser):
             default_year = int(year_match.group(1))
 
         events = []
-        current_date = None
 
-        for node in soup.find_all(["h2", "li"]):
-            if node.name == "h2":
-                heading = re.sub(r"\s+", " ", node.get_text(" ", strip=True)).strip()
+        for node in soup.find_all("li"):
+            classes = " ".join(node.get("class", []))
+            if "individualCard" not in classes:
+                continue
+
+            # Find the nearest preceding date heading in document order. Some
+            # React sites render the heading as a div rather than an h2.
+            current_date = None
+            for previous_text in node.find_all_previous(string=True):
+                heading = re.sub(r"\s+", " ", str(previous_text)).strip()
                 if date_re.match(heading):
                     parsed = parse_event_dates(heading, default_year=default_year)
                     current_date = parsed[0] if parsed else None
-                continue
-
-            classes = " ".join(node.get("class", []))
-            if "individualCard" not in classes or not current_date:
+                    break
+            if not current_date:
                 continue
 
             meta = node.find(class_=re.compile(r"showMeta", re.I))
