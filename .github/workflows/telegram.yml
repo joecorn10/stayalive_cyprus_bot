@@ -38,10 +38,27 @@ jobs:
       - name: Save database and Telegram offset
         if: always()
         run: |
+          mkdir -p /tmp/stayalive-state
           if [ -f events.db ]; then
+            cp events.db /tmp/stayalive-state/events.db
+          fi
+          if [ -f data/telegram_offset.json ]; then
+            cp data/telegram_offset.json /tmp/stayalive-state/telegram_offset.json
+          fi
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          if [ -f /tmp/stayalive-state/events.db ]; then
+            cp /tmp/stayalive-state/events.db events.db
             git add events.db
           fi
-          git add data/telegram_offset.json
+          if [ -f /tmp/stayalive-state/telegram_offset.json ]; then
+            mkdir -p data
+            cp /tmp/stayalive-state/telegram_offset.json data/telegram_offset.json
+            git add data/telegram_offset.json
+          fi
+
           if git diff --cached --quiet; then
             echo "No database or offset changes to commit."
             exit 0
@@ -49,25 +66,5 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          for attempt in 1 2 3; do
-            git commit -m "chore: persist bot state" || true
-            git pull --rebase origin main || {
-              git rebase --abort || true
-              git reset --soft origin/main
-              echo "Retrying state persistence ($attempt/3)..."
-              sleep 3
-              continue
-            }
-            if git push; then
-              echo "Bot state persisted."
-              exit 0
-            fi
-            echo "Push failed; retrying state persistence ($attempt/3)..."
-            sleep 3
-            git fetch origin main
-            git reset --soft origin/main
-          done
-
-          echo "Could not persist bot state after 3 attempts."
-          exit 1
+          git commit -m "chore: persist bot state"
+          git push origin HEAD:main
