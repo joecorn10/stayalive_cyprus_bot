@@ -1,5 +1,12 @@
-"""Cyproplan event parser."""
+"""Cyproplan event parser.
 
+Cyproplan exposes a public event catalogue and individual /event/... pages.
+The catalogue can be rendered differently depending on the client, so the
+parser uses several discovery pages and then enriches each event from its
+detail page.
+"""
+
+import json
 import re
 from datetime import datetime
 from urllib.parse import urljoin
@@ -9,8 +16,15 @@ from bs4 import BeautifulSoup
 
 from app.parsers.base import EventParser
 
-URL = "https://cyproplan.com/"
-HEADERS = {"User-Agent": "StayAliveCyprusBot/1.0"}
+BASE_URL = "https://cyproplan.com/"
+DISCOVERY_URLS = (
+    "https://cyproplan.com/",
+    "https://cyproplan.com/index_m",
+)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; StayAliveCyprusBot/1.0)",
+    "Accept-Language": "en-US,en;q=0.8",
+}
 MONTHS = {
     "january": 1, "february": 2, "march": 3, "april": 4,
     "may": 5, "june": 6, "july": 7, "august": 8,
@@ -19,106 +33,280 @@ MONTHS = {
 
 
 class CyproplanParser(EventParser):
-    def __init__(self, url: str = URL):
+    def __init__(self, url: str = BASE_URL):
         self.url = url
 
     def parse(self) -> list[dict]:
-        response = requests.get(self.url, timeout=25, headers=HEADERS)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        session = requests.Session()
+        session.headers.update(HEADERS)
+
+        event_urls: list[str] = []
+        seen_urls: set[str] = set()
+
+        for discovery_url in DISCOVERY_URLS:
+            try:
+                response = session.get(discovery_url, timeout=20)
+                response.raise_for_status()
+            except requests.RequestException:
+                continue
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            for link in soup.find_all("a", href=True):
+                href = urljoin(discovery_url, link["href"]).split("#", 1)[0]
+                if not _is_event_url(href) or href in seen_urls:
+                    continue
+                seen_urls.add(href)
+                event_urls.append(href)
+
         events = []
-        seen = set()
+        for event_url in event_urls:
+            try:
+                event = _parse_event_page(session, event_url)
+            except requests.RequestException:
+                continue
+            except Exception:
+                continue
+            if event:
+                events.append(event)
 
-        for link in soup.find_all("a", href=True):
-            href = urljoin(self.url, link["href"])
-            if "cyproplan.com" not in href or href.rstrip("/") == self.url.rstrip("/"):
-                continue
-            text = " ".join(link.get_text(" ", strip=True).split())
-            if len(text) < 4:
-                continue
-            if not any(token in href.lower() for token in ("/event", "/events/")):
-                continue
-
-            card = link
-            for _ in range(5):
-                if card.parent:
-                    card = card.parent
-            card_text = " ".join(card.get_text(" ", strip=True).split())
-            parsed = _extract_datetime(card_text)
-            if not parsed or href in seen:
-                continue
-
-            date_value, end_date, time_value = parsed
-            seen.add(href)
-            events.append({
-                "title": text[:200],
-                "description": card_text[:2000],
-                "date": date_value,
-                "end_date": end_date,
-                "time": time_value,
-                "venue": _extract_venue(card_text),
-                "city": _extract_city(card_text),
-                "price": _extract_price(card_text),
-                "ticket_url": href,
-                "source_url": href,
-                "image_url": "",
-                "category": _extract_category(card_text),
-            })
         return events
 
 
-def _extract_datetime(text: str):
-    now = datetime.now()
-    patterns = [
-        r"\b([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?",
-        r"\b(\d{1,2})\s+([A-Za-z]+)(?:\s*,?\s*(\d{4}))?",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.I)
-        if not match:
+def _is_event_url(url: str) -> bool:
+    return (
+        url.startswith("https://cyproplan.com/event/")
+        and url.rstrip("/") != "https://cyproplan.com/event"
+    )
+
+
+def _parse_event_page(session: requests.Session, url: str) -> dict | None:
+    response = session.get(url, timeout=20)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    structured = _json_ld(soup)
+    title = (
+        structured.get("name")
+        or _meta(soup, "og:title")
+        or _heading(soup)
+    )
+    if not title:
+        return None
+    title = _clean(title)
+
+    text = " ".join(soup.stripped_strings)
+    date_value, end_date = _extract_dates(soup, structured, text)
+    if not date_value:
+        return None
+
+    time_value = _extract_time(soup, structured, text)
+    venue, city = _extract_location(soup, structured, text)
+    price = _extract_price(soup, structured, text)
+    image_url = (
+        structured.get("image")
+        if isinstance(structured.get("image"), str)
+        else _meta(soup, "og:image")
+    ) or ""
+    ticket_url = _external_ticket_url(soup, url)
+
+    description = _description(soup, structured, text)
+    category = _extract_category(text)
+
+    return {
+        "title": title[:200],
+        "description": description[:4000],
+        "date": date_value,
+        "end_date": end_date or date_value,
+        "time": time_value,
+        "venue": venue,
+        "city": city,
+        "price": price,
+        "ticket_url": ticket_url or url,
+        "source_url": url,
+        "image_url": image_url,
+        "category": category,
+    }
+
+
+def _json_ld(soup: BeautifulSoup) -> dict:
+    for node in soup.select('script[type="application/ld+json"]'):
+        raw = node.string or node.get_text()
+        try:
+            data = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
             continue
-        if pattern.startswith(r"\b([A"):
-            month_name, day, year = match.group(1), int(match.group(2)), match.group(3)
-        else:
-            day, month_name, year = int(match.group(1)), match.group(2), match.group(3)
-        month = MONTHS.get(month_name.lower())
-        if not month:
-            continue
-        year = int(year) if year else now.year
-        date_value = f"{year:04d}-{month:02d}-{day:02d}"
-        time_match = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
-        time_value = f"{time_match.group(1)}:{time_match.group(2)}" if time_match else ""
-        return date_value, date_value, time_value
-    return None
+        candidates = data if isinstance(data, list) else [data]
+        for item in candidates:
+            if isinstance(item, dict) and (
+                item.get("@type") == "Event"
+                or "startDate" in item
+                or "event" in item
+            ):
+                return item
+    return {}
 
 
-def _extract_venue(text: str) -> str:
-    lines = [x.strip(" .") for x in re.split(r"\s{2,}|\n", text) if x.strip()]
-    return next((x for x in lines if "venue" in x.lower()), "")
+def _meta(soup: BeautifulSoup, name: str) -> str:
+    node = soup.find("meta", attrs={"property": name}) or soup.find(
+        "meta", attrs={"name": name}
+    )
+    return _clean(node.get("content", "")) if node else ""
 
 
-def _extract_city(text: str) -> str:
-    cities = ("Limassol", "Nicosia", "Larnaca", "Paphos", "Protaras", "Ayia Napa")
-    for city in cities:
-        if city.lower() in text.lower():
-            return city
+def _heading(soup: BeautifulSoup) -> str:
+    for tag in soup.find_all(["h1", "h2"], limit=5):
+        value = _clean(tag.get_text(" ", strip=True))
+        if value:
+            return value
     return ""
 
 
-def _extract_price(text: str) -> str:
-    match = re.search(r"(?:€|EUR\s*)\s*\d+(?:[.,]\d+)?", text)
-    return match.group(0) if match else ""
+def _extract_dates(soup: BeautifulSoup, structured: dict, text: str):
+    start = structured.get("startDate")
+    end = structured.get("endDate")
+    if start:
+        parsed = _iso_date(start)
+        if parsed:
+            return parsed, _iso_date(end) or parsed
+
+    # Cyproplan pages currently expose ranges such as:
+    # "Sep 30 (Wed) - Oct 4 (Sun)".
+    month = r"(January|February|March|April|May|June|July|August|September|October|November|December)"
+    range_match = re.search(
+        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\s*"
+        rf"(?:\([^)]*\))?\s*[-–]\s*"
+        rf"{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?",
+        text,
+        re.I,
+    )
+    if range_match:
+        year = datetime.now().year
+        sm = MONTHS[range_match.group(1).lower()]
+        em = MONTHS[range_match.group(3).lower()]
+        sy = year
+        ey = year + (1 if em < sm else 0)
+        return (
+            f"{sy:04d}-{sm:02d}-{int(range_match.group(2)):02d}",
+            f"{ey:04d}-{em:02d}-{int(range_match.group(4)):02d}",
+        )
+
+    single = re.search(
+        rf"\b{month}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b",
+        text,
+        re.I,
+    )
+    if single:
+        year = datetime.now().year
+        m = MONTHS[single.group(1).lower()]
+        d = int(single.group(2))
+        value = f"{year:04d}-{m:02d}-{d:02d}"
+        return value, value
+
+    return None, None
+
+
+def _iso_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    match = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(value))
+    return match.group(0) if match else None
+
+
+def _extract_time(soup: BeautifulSoup, structured: dict, text: str) -> str:
+    value = structured.get("startDate")
+    if value:
+        match = re.search(r"T(\d{2}:\d{2})", str(value))
+        if match:
+            start = match.group(1)
+            end_value = structured.get("endDate")
+            end_match = re.search(r"T(\d{2}:\d{2})", str(end_value or ""))
+            return f"{start}-{end_match.group(1)}" if end_match else start
+
+    match = re.search(
+        r"\b([01]?\d|2[0-3]):([0-5]\d)\s*[-–]\s*([01]?\d|2[0-3]):([0-5]\d)\b",
+        text,
+    )
+    if match:
+        return f"{int(match.group(1)):02d}:{match.group(2)}-{int(match.group(3)):02d}:{match.group(4)}"
+    match = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", text)
+    return f"{int(match.group(1)):02d}:{match.group(2)}" if match else ""
+
+
+def _extract_location(soup: BeautifulSoup, structured: dict, text: str):
+    location = structured.get("location")
+    if isinstance(location, dict):
+        name = _clean(location.get("name", ""))
+        address = location.get("address", {})
+        if isinstance(address, dict):
+            city = _clean(address.get("addressLocality", ""))
+        else:
+            city = ""
+        if name or city:
+            return name, city
+
+    # The rendered page normally places the venue immediately before the city.
+    lines = [_clean(x) for x in soup.stripped_strings if _clean(x)]
+    cities = ("Limassol", "Lemesos", "Nicosia", "Larnaca", "Paphos", "Protaras", "Ayia Napa")
+    for index, line in enumerate(lines):
+        if any(city.lower() in line.lower() for city in cities):
+            city = next(city for city in cities if city.lower() in line.lower())
+            venue = lines[index - 1] if index else ""
+            if venue and len(venue) < 160:
+                return venue, "Limassol" if city == "Lemesos" else city
+    return "", ""
+
+
+def _extract_price(soup: BeautifulSoup, structured: dict, text: str) -> str:
+    offers = structured.get("offers")
+    if isinstance(offers, dict):
+        price = offers.get("price")
+        if price is not None:
+            return "Free" if str(price) == "0" else f"{price} €"
+    if re.search(r"\bFree\b", text, re.I):
+        return "Free"
+    match = re.search(r"(?:Price:\s*)?(\d+(?:[.,]\d+)?)\s*€", text, re.I)
+    return f"{match.group(1)} €" if match else ""
+
+
+def _external_ticket_url(soup: BeautifulSoup, page_url: str) -> str:
+    for link in soup.find_all("a", href=True):
+        href = urljoin(page_url, link["href"])
+        if not href.startswith("http") or "cyproplan.com" in href:
+            continue
+        label = _clean(link.get_text(" ", strip=True)).lower()
+        if any(x in label for x in ("ticket", "buy", "register", "registration", "билет")):
+            return href
+    return ""
+
+
+def _description(soup: BeautifulSoup, structured: dict, text: str) -> str:
+    if structured.get("description"):
+        return _clean(structured["description"])
+    node = soup.find(string=re.compile(r"About", re.I))
+    if node:
+        parent = node.parent
+        value = parent.parent.get_text(" ", strip=True) if parent and parent.parent else ""
+        return _clean(value)
+    return text[:4000]
 
 
 def _extract_category(text: str) -> str:
-    mapping = {
-        "music": "Музыка", "concert": "Музыка", "festival": "Фестиваль",
-        "art": "Искусство", "theater": "Театр", "theatre": "Театр",
-        "sport": "Спорт", "food": "Еда", "kids": "Для детей",
-        "business": "Бизнес", "education": "Образование",
-    }
     lower = text.lower()
-    for key, value in mapping.items():
-        if key in lower:
-            return value
+    mapping = (
+        (("concert", "music", "jazz", "soul"), "Музыка"),
+        (("theater", "theatre", "comedy", "stand-up"), "Театр"),
+        (("art", "gallery", "exhibition"), "Искусство"),
+        (("festival",), "Фестиваль"),
+        (("sport", "race", "run", "tournament"), "Спорт"),
+        (("food", "wine", "beer", "gastronom"), "Еда и напитки"),
+        (("kid", "children", "family"), "Для детей"),
+        (("business", "conference", "education"), "Бизнес"),
+    )
+    for words, category in mapping:
+        if any(word in lower for word in words):
+            return category
     return "События"
+
+
+def _clean(value: str) -> str:
+    return " ".join(str(value or "").split()).strip()
