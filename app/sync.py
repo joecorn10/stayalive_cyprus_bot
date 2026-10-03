@@ -41,7 +41,7 @@ def _parse_source(source) -> list[dict]:
     if source["type"] == "Website":
         return WebsiteParser(source["url"]).parse()
     if source["type"] == "FacebookDiscovery":
-        return FacebookDiscoveryParser(source.get("url", "")).parse()
+        return FacebookDiscoveryParser(source["url"]).parse()
     if source["type"] == "Facebook":
         return FacebookParser(source["url"]).parse()
     if source["type"] == "Telegram":
