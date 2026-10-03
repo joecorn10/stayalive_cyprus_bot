@@ -97,3 +97,5 @@ Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=
 # final parser validation
 
 # validate aria date parsing
+
+# clean serialized validation
