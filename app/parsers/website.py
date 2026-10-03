@@ -13,6 +13,7 @@ from app.parsers.base import EventParser
 
 HEADERS = {"User-Agent": "StayAliveCyprusBot/1.0"}
 
+# Stantar cards may place the day heading outside the ticket card.
 class WebsiteParser(EventParser):
     def __init__(self, url: str):
         self.url = url
