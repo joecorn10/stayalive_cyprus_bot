@@ -4,7 +4,7 @@ import sys
 import time
 
 from app.config import TELEGRAM_BOT_TOKEN
-from app.telegram import configure_telegram_menu, poll_once
+from app.telegram import poll_once
 
 # Finish before the next scheduled GitHub Actions run starts. This keeps the
 # git-backed Telegram offset single-writer and avoids overlapping workers.
@@ -15,12 +15,6 @@ SLEEP_SECONDS = 1
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
-
-    try:
-        configure_telegram_menu(TELEGRAM_BOT_TOKEN)
-    except Exception as exc:
-        # Menu setup must not prevent polling if Telegram has a transient error.
-        print(f"Telegram menu configuration failed: {exc}", file=sys.stderr)
 
     deadline = time.monotonic() + WORKER_SECONDS
     handled = False
