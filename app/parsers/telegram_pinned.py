@@ -112,7 +112,7 @@ def _parse_pinned_text(text: str, source_url: str, message: dict) -> list[dict]:
 def _message_url(message: dict, fallback: str) -> str:
     message_id = message.get("message_id")
     if message_id:
-        return f"{fallback.rstrip('/')}/c/{message_id}"
+        return f"{fallback.rstrip('/')}#message_id={message_id}"
     return fallback
 
 
