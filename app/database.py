@@ -168,6 +168,7 @@ def _event_key(event: dict) -> tuple:
     return (
         title,
         event.get("date", ""),
+        str(event.get("time", "")).lower().strip(),
         venue,
         str(event.get("city", "")).lower().strip(),
     )
@@ -180,7 +181,7 @@ def _find_matching_event(conn: sqlite3.Connection, event: dict):
            WHERE date = ?
              AND (COALESCE(city, '') = ? OR COALESCE(city, '') = '')
            ORDER BY id""",
-        (key[1], key[3]),
+        (key[1], key[4]),
     ).fetchall()
     for row in rows:
         if _event_key(dict(row)) == key:
@@ -207,9 +208,23 @@ def upsert_events(events: list[dict]) -> int:
                     (source_url,),
                 ).fetchone()
 
+            # One source page can contain many events. Do not treat source_url
+            # alone as the event identity.
             existing = conn.execute(
-                "SELECT id FROM events WHERE source_url = ? LIMIT 1",
-                (source_url,),
+                """SELECT * FROM events
+                   WHERE source_url = ?
+                     AND date = ?
+                     AND COALESCE(time, '') = ?
+                     AND COALESCE(venue, '') = ?
+                     AND title = ?
+                   LIMIT 1""",
+                (
+                    source_url,
+                    event.get("date", ""),
+                    event.get("time", ""),
+                    event.get("venue", ""),
+                    event.get("title", ""),
+                ),
             ).fetchone()
 
             match = existing or _find_matching_event(conn, event)
