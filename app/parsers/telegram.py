@@ -69,6 +69,12 @@ def _parse_generic(soup: BeautifulSoup, source_url: str) -> list[dict]:
 
 
 def _parse_cyproplan(soup: BeautifulSoup, source_url: str) -> list[dict]:
+    """Parse Cyproplan digest posts into one event per dated item.
+
+    Cyproplan commonly publishes several events in a single Telegram post.
+    The date may be on the same line as the title or on a separate line, so
+    parsing is deliberately stateful rather than assuming one event == one line.
+    """
     events = []
     seen = set()
 
@@ -77,55 +83,117 @@ def _parse_cyproplan(soup: BeautifulSoup, source_url: str) -> list[dict]:
         if not body:
             continue
 
-        # Keep line breaks: Cyproplan publishes one event per line.
         lines = [line.strip() for line in body.get_text("\n").splitlines() if line.strip()]
         current_city = ""
         pending_url = ""
+        last_candidate_lines: list[str] = []
 
-        for line in lines:
+        for index, line in enumerate(lines):
             if line.startswith("🇨🇾") or "Команда Cyproplan" in line:
                 continue
-            if line in ("Никосия", "Лимасол", "Ларнака", "Пафос", "Другие локации"):
-                current_city = "" if line == "Другие локации" else line
+
+            city = _cyproplan_city(line)
+            if city is not None:
+                current_city = city
+                last_candidate_lines = []
                 continue
 
             urls = re.findall(r"https?://[^\s)]+", line)
-            if urls and not re.search(r"\d", line):
+            if urls:
                 pending_url = urls[0].rstrip(".,")
-                continue
+                # A URL can be attached to the event on the same line.
+                if not _cyproplan_dates(line):
+                    continue
 
             date_match = _cyproplan_dates(line)
             if not date_match:
-                continue
-
-            title, event_url = _cyproplan_title_and_url(body, line)
-            event_url = event_url or pending_url or _message_url(message, source_url)
-            pending_url = ""
-
-            if not title or len(title) < 4:
+                if not urls and not _looks_like_footer(line):
+                    last_candidate_lines.append(line)
+                    last_candidate_lines = last_candidate_lines[-3:]
                 continue
 
             date_value, end_date = date_match
+
+            # First try title + date on the same line.
+            title = _clean_title(line)
+            event_url = _cyproplan_title_and_url(body, line)
+
+            # If the date is on a standalone line, use the nearest preceding
+            # meaningful line as the title. This is common in Cyproplan digests.
+            if len(title) < 4 or _looks_like_date_only(title):
+                for previous in reversed(last_candidate_lines):
+                    candidate = _clean_title(previous)
+                    if len(candidate) >= 4 and not _looks_like_date_only(candidate):
+                        title = candidate
+                        break
+
+            # If the URL is on a separate line immediately before the date,
+            # keep it attached to this event.
+            event_url = event_url or pending_url or _message_url(message, source_url)
+            pending_url = ""
+
+            if not title or len(title) < 4 or _looks_like_date_only(title):
+                last_candidate_lines = []
+                continue
+
             time_value = _extract_time_range(line)
-            key = (title.lower(), date_value, end_date, current_city.lower())
+            description_lines = []
+            for candidate in (line, *last_candidate_lines[-2:]):
+                if candidate not in description_lines:
+                    description_lines.append(candidate)
+            description = " · ".join(description_lines)
+
+            key = (
+                re.sub(r"\s+", " ", title.lower()).strip(),
+                date_value,
+                end_date,
+                current_city.lower(),
+            )
             if key in seen:
+                last_candidate_lines = []
                 continue
             seen.add(key)
 
             events.append(_event(
                 title[:200],
-                line,
+                description,
                 date_value,
                 end_date,
                 time_value,
                 current_city,
-                _infer_category(line),
+                _infer_category(description),
                 event_url,
                 source_url,
-                _infer_category(line),
+                _infer_category(description),
             ))
+            last_candidate_lines = []
 
     return events
+
+
+def _cyproplan_city(line: str) -> str | None:
+    normalized = line.strip()
+    if normalized == "Другие локации":
+        return ""
+    for city in CYPROPLAN_CITIES:
+        if normalized.casefold() == city.casefold():
+            return city
+    return None
+
+
+def _looks_like_footer(line: str) -> bool:
+    lower = line.casefold()
+    return any(marker in lower for marker in (
+        "команда cyproplan",
+        "подписывайтесь",
+        "cyproplan.com",
+        "instagram.com/cyproplan",
+    ))
+
+
+def _looks_like_date_only(text: str) -> bool:
+    value = text.strip()
+    return bool(_cyproplan_dates(value)) and len(re.sub(r"\d|[.\-–—:/ ]", "", value)) < 18
 
 
 def _cyproplan_title_and_url(body, line: str) -> tuple[str, str]:
