@@ -289,12 +289,6 @@ def poll_once(token: str) -> bool:
                 f"error={exc}",
                 file=sys.stderr,
             )
-        except Exception as exc:
-            print(
-                f"Telegram update failed: update_id={update.get('update_id')} "
-                f"error={exc}",
-                file=sys.stderr,
-            )
             if chat_id is not None:
                 try:
                     error_text = "⚠️ Не удалось обработать запрос. Попробуй ещё раз."
