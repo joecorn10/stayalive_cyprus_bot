@@ -30,7 +30,7 @@ def _next_weekday(value: datetime, weekday: int) -> str:
     return (value.date() + timedelta(days=delta)).isoformat()
 
 def parse_event_dates(text: str, *, default_year: int | None = None) -> tuple[str, str] | None:
-    """Parse a single date, date range, or recurring weekday from human/ISO text."""
+    """Parse a single date, date range, relative date, or recurring weekday."""
     if not text:
         return None
     text = str(text).strip().replace("–", "-").replace("—", "-")
@@ -81,6 +81,18 @@ def parse_event_dates(text: str, *, default_year: int | None = None) -> tuple[st
         value = _date(y, MONTHS[m.group(2).lower()], int(m.group(1)))
         return value, value
 
+    if re.search(r"\b(?:today|сегодня)\b", text, re.I):
+        value = now.date().isoformat()
+        return value, value
+    if re.search(r"\b(?:tomorrow|завтра)\b", text, re.I):
+        value = (now.date() + timedelta(days=1)).isoformat()
+        return value, value
+    if re.search(r"\b(?:this weekend|на этих выходных)\b", text, re.I):
+        days_to_saturday = (5 - now.weekday()) % 7
+        saturday = now.date() + timedelta(days=days_to_saturday)
+        sunday = saturday + timedelta(days=1)
+        return saturday.isoformat(), sunday.isoformat()
+
     weekdays = "|".join(sorted(WEEKDAYS, key=len, reverse=True))
     m = re.search(rf"\b(?:every|each|кажд(?:ый|ую|ое)|по)\s+({weekdays})\b", text, re.I)
     if m:
@@ -89,6 +101,12 @@ def parse_event_dates(text: str, *, default_year: int | None = None) -> tuple[st
     m = re.search(rf"\b(?:this|next)\s+({weekdays})\b", text, re.I)
     if m:
         value = _next_weekday(now, WEEKDAYS[m.group(1).lower()])
+        return value, value
+
+    m = re.search(r"\b(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?\b", text)
+    if m:
+        y = int(m.group(3)) if m.group(3) else year
+        value = _date(y, int(m.group(2)), int(m.group(1)))
         return value, value
 
     return None
