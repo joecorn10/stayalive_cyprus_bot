@@ -16,6 +16,8 @@ from app.database import (
     list_recent_events,
     list_sources,
     set_chat_state,
+    cache_is_fresh,
+    mark_cache_fresh,
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
@@ -333,12 +335,16 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         if _SYNC_IN_PROGRESS:
             return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
-        _SYNC_IN_PROGRESS = True
-        try:
-            print("On-demand event sync: today")
-            sync_all()
-        finally:
-            _SYNC_IN_PROGRESS = False
+        if not cache_is_fresh("events", ttl_minutes=30):
+            _SYNC_IN_PROGRESS = True
+            try:
+                print("On-demand event sync: cache expired")
+                sync_all()
+                mark_cache_fresh("events")
+            finally:
+                _SYNC_IN_PROGRESS = False
+        else:
+            print("On-demand event sync: using fresh cache")
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -351,12 +357,16 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         if _SYNC_IN_PROGRESS:
             return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
-        _SYNC_IN_PROGRESS = True
-        try:
-            print("On-demand event sync: week")
-            sync_all()
-        finally:
-            _SYNC_IN_PROGRESS = False
+        if not cache_is_fresh("events", ttl_minutes=30):
+            _SYNC_IN_PROGRESS = True
+            try:
+                print("On-demand event sync: cache expired")
+                sync_all()
+                mark_cache_fresh("events")
+            finally:
+                _SYNC_IN_PROGRESS = False
+        else:
+            print("On-demand event sync: using fresh cache")
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
