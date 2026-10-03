@@ -129,27 +129,29 @@ def _parse_cyproplan(soup: BeautifulSoup, source_url: str) -> list[dict]:
 
 
 def _cyproplan_title_and_url(body, line: str) -> tuple[str, str]:
-    # Find the anchor whose visible text belongs to this event line.
+    event_url = ""
     for anchor in body.find_all("a", href=True):
         label = " ".join(anchor.stripped_strings)
         if label and label in line:
-            return _clean_title(line, label), anchor["href"]
-    return _clean_title(line, ""), ""
+            event_url = anchor["href"]
+            break
+    return _clean_title(line), event_url
 
 
-def _clean_title(line: str, anchor_label: str) -> str:
-    text = anchor_label or line
-    text = re.sub(r"^\W+", "", text)
+def _clean_title(line: str) -> str:
+    text = line
+    text = re.sub(r"https?://\S+", "", text)
     text = re.sub(
-        r"\s*(?:\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|"
-        r"(?:до\s+)?\d{1,2}(?:[-–]\d{1,2})?\s+"
+        r"\s*(?:до\s+)?\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+"
         r"(?:января|февраля|марта|апреля|мая|июня|июля|августа|"
-        r"сентября|октября|ноября|декабря))\b.*$",
+        r"сентября|октября|ноября|декабря)\b.*$",
         "",
         text,
         flags=re.I,
     )
+    text = re.sub(r"\s*\b(?:\d{1,2}:\d{2})(?:\s*[-–]\s*\d{1,2}:\d{2})?\b.*$", "", text)
     text = re.sub(r"\s+", " ", text).strip(" .,:—-")
+    text = re.sub(r"^[^\wА-Яа-яЁё]+", "", text)
     return text
 
 
