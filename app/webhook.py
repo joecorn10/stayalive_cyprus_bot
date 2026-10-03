@@ -2,16 +2,25 @@
 
 import os
 import threading
+from datetime import timedelta
 
 from flask import Flask, jsonify, request
 
-from app.handlers import handle_callback, handle_message
+from app.database import list_events
+from app.handlers import (
+    cyprus_today,
+    format_events,
+    handle_callback,
+    handle_message,
+)
+from app.sync import sync_source_by_url
 from app.telegram import api_call, edit_message, send_message
 
 app = Flask(__name__)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+STANTAR_URL = "https://stantarkkomety.com/festival/tickets"
 
 
 def _webhook_path() -> str:
@@ -44,6 +53,61 @@ def _valid_request() -> bool:
     if not WEBHOOK_SECRET:
         return True
     return request.headers.get("X-Telegram-Bot-Api-Secret-Token", "") == WEBHOOK_SECRET
+
+
+def _cached_event_reply(text: str):
+    """Build an answer from SQLite without touching slow external sources."""
+    today = cyprus_today()
+    if text == "📅 Сегодня":
+        events = list_events(today.isoformat(), today.isoformat())
+        return format_events("📅 Сегодня", events, display_date=today)
+    end = today + timedelta(days=6)
+    events = list_events(today.isoformat(), end.isoformat())
+    return format_events("🗓 На этой неделе", events)
+
+
+def _refresh_and_update(chat_id: int, text: str, progress_message_id: int | None) -> None:
+    """Refresh the live source in the background, then update the visible result."""
+    try:
+        print(f"Telegram background refresh started: {text!r}")
+        sync_source_by_url(STANTAR_URL)
+        reply_text, keyboard = _cached_event_reply(text)
+        print(f"Telegram background refresh finished: {text!r}")
+
+        if progress_message_id is not None:
+            try:
+                edit_message(
+                    TOKEN,
+                    chat_id,
+                    progress_message_id,
+                    reply_text,
+                    keyboard,
+                    parse_mode=None,
+                )
+                print(
+                    f"Telegram background result updated: chat_id={chat_id} "
+                    f"message_id={progress_message_id}"
+                )
+                return
+            except Exception as exc:
+                print(f"Telegram background edit failed: {exc}")
+
+        send_message(TOKEN, chat_id, reply_text, keyboard, parse_mode=None)
+    except Exception as exc:
+        print(f"Telegram background refresh failed: {exc}")
+        if progress_message_id is not None:
+            try:
+                reply_text, keyboard = _cached_event_reply(text)
+                edit_message(
+                    TOKEN,
+                    chat_id,
+                    progress_message_id,
+                    reply_text,
+                    keyboard,
+                    parse_mode=None,
+                )
+            except Exception as fallback_exc:
+                print(f"Telegram cached fallback failed: {fallback_exc}")
 
 
 def _process_update(update: dict) -> None:
@@ -92,9 +156,11 @@ def _process_update(update: dict) -> None:
             return
 
         needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
-        progress_message_id = None
 
         if needs_sync:
+            # Never block the user-visible response on an external parser.
+            # First show the current SQLite snapshot, then refresh Stantar in
+            # a background thread and replace the message when it finishes.
             try:
                 progress_message_id = send_message(
                     TOKEN,
@@ -104,24 +170,35 @@ def _process_update(update: dict) -> None:
                 )
             except Exception as exc:
                 print(f"Telegram progress message failed: {exc}")
+                progress_message_id = None
+
+            cached_text, cached_keyboard = _cached_event_reply(text)
+
+            if progress_message_id is not None:
+                try:
+                    edit_message(
+                        TOKEN,
+                        chat_id,
+                        progress_message_id,
+                        cached_text,
+                        cached_keyboard,
+                        parse_mode=None,
+                    )
+                except Exception as exc:
+                    print(f"Telegram cached result edit failed: {exc}")
+                    send_message(TOKEN, chat_id, cached_text, cached_keyboard, parse_mode=None)
+            else:
+                send_message(TOKEN, chat_id, cached_text, cached_keyboard, parse_mode=None)
+
+            threading.Thread(
+                target=_refresh_and_update,
+                args=(chat_id, text, progress_message_id),
+                daemon=True,
+            ).start()
+            return
 
         reply_text, keyboard = handle_message(message)
-
-        if progress_message_id is not None:
-            try:
-                edit_message(
-                    TOKEN,
-                    chat_id,
-                    progress_message_id,
-                    reply_text,
-                    keyboard,
-                    parse_mode=None,
-                )
-            except Exception as exc:
-                print(f"Telegram progress edit failed: {exc}")
-                send_message(TOKEN, chat_id, reply_text, keyboard, parse_mode=None)
-        else:
-            send_message(TOKEN, chat_id, reply_text, keyboard)
+        send_message(TOKEN, chat_id, reply_text, keyboard)
 
     except Exception as exc:
         print(f"Telegram webhook update failed: {exc}")
