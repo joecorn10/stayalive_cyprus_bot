@@ -39,7 +39,20 @@ def save_offset(offset: int) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps({"offset": offset}, indent=2) + "\n", encoding="utf-8")
 
+def telegram_diagnostics(token: str) -> None:
+    me = api_call(token, "getMe").get("result", {})
+    webhook = api_call(token, "getWebhookInfo").get("result", {})
+    print(
+        "Telegram diagnostics: "
+        f"bot=@{me.get('username')} id={me.get('id')} "
+        f"webhook_url={webhook.get('url')!r} "
+        f"pending={webhook.get('pending_update_count', 0)} "
+        f"last_error={webhook.get('last_error_message')!r}"
+    )
+
+
 def poll_once(token: str) -> bool:
+    telegram_diagnostics(token)
     offset = load_offset()
     payload = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
     if offset is not None:
