@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 CATEGORY_ALIASES = {
     "музыка": "🎵 Музыка",
+    "comedy": "🎭 Comedy",
+    "стендап": "🎭 Comedy",
+    "комедия": "🎭 Comedy",
     "music": "🎵 Музыка",
     "концерт": "🎵 Музыка",
     "концерты": "🎵 Музыка",
@@ -50,6 +53,7 @@ CATEGORY_ALIASES = {
 
 CATEGORY_LABELS = {
     "🎵 Музыка",
+    "🎭 Comedy",
     "🍷 Еда и вино",
     "🎨 Искусство",
     "🪩 Nightlife",
@@ -84,6 +88,7 @@ def canonical_category(category: str) -> str:
     return value
 
 CATEGORY_RULES = (
+    ("🎭 Comedy", re.compile(r"\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комеди|юмор)\b", re.I)),
     ("🎵 Музыка", re.compile(r"\b(concert|live|music|dj|djs|band|gig|singer|pianist|музык|концерт|диджей|ди-джей|группа|певец|джаз|techno|house)\b", re.I)),
     ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|дегустац|вино|ужин|еда|шеф|ресторан|вин|гастроном)\b", re.I)),
     ("🎨 Искусство", re.compile(r"\b(art|gallery|exhibition|opening|museum|painting|sculpture|искусств|выстав|галере|музе|живопис|скульптур|фото)\b", re.I)),
