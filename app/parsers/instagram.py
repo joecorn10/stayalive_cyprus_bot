@@ -218,13 +218,13 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
     # 2. Explicit post URLs are still useful even when Instagram does not
     # expose structured metadata.
     for match in re.finditer(
-        r'https?://(?:www\\.)?instagram\\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
+        r'https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
         page,
         re.I,
     ):
         add_post(match.group(0))
 
-    escaped = page.replace("\\\\/", "/")
+    escaped = page.replace("\\/", "/")
     for match in re.finditer(
         r'https?://(?:www\\.)?instagram\\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
         escaped,
@@ -234,7 +234,7 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
 
     # 3. A number of builds expose only relative post links.
     for match in re.finditer(
-        r'href=["\\\'](/(?:p|reel|tv)/[A-Za-z0-9_-]+/?)["\\\']',
+        r'href=["\'](/(?:p|reel|tv)/[A-Za-z0-9_-]+/?)["\']',
         page,
         re.I,
     ):
@@ -294,18 +294,18 @@ def _extract_caption_fragments(raw: str, add_post) -> None:
 
     # Match a caption object together with a nearby shortcode/permalink.
     for match in re.finditer(
-        r'"(?:shortcode|code)"\\s*:\\s*"([A-Za-z0-9_-]+)"(?P<body>.{0,12000})',
+        r'"(?:shortcode|code)"\s*:\s*"([A-Za-z0-9_-]+)"(?P<body>.{0,12000})',
         text,
         re.I | re.S,
     ):
         body = match.group("body")
         caption_match = re.search(
-            r'"(?:caption|text)"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"',
+            r'"(?:caption|text)"\s*:\s*"((?:\\.|[^"\\])*)"',
             body,
             re.I,
         )
         date_match = re.search(
-            r'"(?:taken_at_timestamp|taken_at|datePublished|uploadDate)"\\s*:\\s*"?([0-9T:+.\\-Z]+)"?',
+            r'"(?:taken_at_timestamp|taken_at|datePublished|uploadDate)"\s*:\s*"?([0-9T:+.\-Z]+)"?',
             body,
             re.I,
         )
@@ -327,7 +327,7 @@ def _attach_nearby_captions(page: str, posts: list[dict]) -> None:
     """Associate visible/embedded caption strings with the nearest post URL."""
     candidates = []
     for match in re.finditer(
-        r'"(?:caption|text|title)"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"',
+        r'"(?:caption|text|title)"\s*:\s*"((?:\\.|[^"\\])*)"',
         page,
         re.I,
     ):
@@ -336,7 +336,7 @@ def _attach_nearby_captions(page: str, posts: list[dict]) -> None:
             caption = json.loads(f'"{raw}"')
         except json.JSONDecodeError:
             caption = raw.replace("\\\\n", " ")
-        caption = html.unescape(re.sub(r"\\s+", " ", caption)).strip()
+        caption = html.unescape(re.sub(r"\s+", " ", caption)).strip()
         if len(caption) >= 20:
             candidates.append((match.start(), caption))
 
