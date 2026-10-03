@@ -75,6 +75,12 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sync_cache (
+                cache_key TEXT PRIMARY KEY,
+                synced_at TEXT NOT NULL
+            )
+        """)
         seed_sources = [
             ("Cyproplan", "https://cyproplan.com/", "Website", "Cyprus event aggregator"),
             ("ETKO Cyprus", "https://etkocyprus.com/events", "Website", "Events, concerts and parties"),
@@ -292,6 +298,40 @@ def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
                ORDER BY date, time, title COLLATE NOCASE""",
             (end_date, start_date),
         ).fetchall()
+
+
+
+def cache_is_fresh(cache_key: str, ttl_minutes: int = 30) -> bool:
+    init_db()
+    from datetime import datetime, timedelta, timezone
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT synced_at FROM sync_cache WHERE cache_key = ?",
+            (cache_key,),
+        ).fetchone()
+    if not row:
+        return False
+    try:
+        synced_at = datetime.fromisoformat(row["synced_at"])
+    except (TypeError, ValueError):
+        return False
+    if synced_at.tzinfo is None:
+        synced_at = synced_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - synced_at < timedelta(minutes=ttl_minutes)
+
+
+def mark_cache_fresh(cache_key: str) -> None:
+    init_db()
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO sync_cache (cache_key, synced_at)
+               VALUES (?, ?)
+               ON CONFLICT(cache_key) DO UPDATE SET synced_at = excluded.synced_at""",
+            (cache_key, now),
+        )
+        conn.commit()
 
 
 def list_event_sources(event_id: int) -> list[sqlite3.Row]:
