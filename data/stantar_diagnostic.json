@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-10-03T19:42:19.408188Z",
+  "generated_at_utc": "2026-10-03T19:44:17.862027Z",
   "parser_count": 0,
   "normalized_count": 0,
   "parser_oct4": [],
@@ -435,6 +435,27 @@
       "Русский",
       "Русский Стендап: Line Up шоу",
       "Русский"
-    ]
+    ],
+    "around_russian": [
+      "Cypriot Greek Line-up",
+      "Cypriot Greek",
+      "Buy tickets",
+      " ↗",
+      "Price & availability on RSRVIN",
+      "19:30",
+      "–",
+      "20:30",
+      " · ",
+      "Da Vinci",
+      "Русский Стендап: Line Up шоу",
+      "Русский",
+      "Купить билет",
+      " ↗",
+      "Цена и наличие на RSRVIN",
+      "21:00",
+      "–",
+      "22:30"
+    ],
+    "raw_russian_html": "N</small></div></li><li class=\"FestivalTickets-module__LpTyiG__individualCard\" id=\"ticket-sun-sto-greek\"><a class=\"FestivalTickets-module__LpTyiG__miniPoster\" tabindex=\"-1\" aria-hidden=\"true\" href=\"/festival/shows/sun-sto-greek\"><img alt=\"\" loading=\"lazy\" width=\"1600\" height=\"2000\" decoding=\"async\" data-nimg=\"1\" style=\"color:transparent\" sizes=\"(max-width: 650px) 72px, 96px\" srcSet=\"/responsive/7fbeb38c6036e871d344-160.webp 160w, /responsive/7fbeb38c6036e871d344-320.webp 320w, /responsive/7fbeb38c6036e871d344-640.webp 640w, /responsive/7fbeb38c6036e871d344-960.webp 960w, /responsive/7fbeb38c6036e871d344-1600.webp 1600w, /responsive/7fbeb38c6036e871d344-1600.webp 2400w\" src=\"/responsive/7fbeb38c6036e871d344-1600.webp\"/></a><div class=\"FestivalTickets-module__LpTyiG__individualCopy\"><p class=\"FestivalTickets-module__LpTyiG__showMeta\">19:30<!-- -->–<!-- -->20:30<!-- --> · <!-- -->Sto Dromo Bar</p><h3><a href=\"/festival/shows/sun-sto-greek\">Cypriot Greek Line-up</a></h3><p class=\"FestivalTickets-module__LpTyiG__showLanguage\">Cypriot Greek</p></div><div class=\"FestivalTickets-module__LpTyiG__individualAction\"><a href=\"https://rsrvin.com/en/events/6a91b02a944539d70dd47cf2-Sunday%20Sto%20Dromo%20%E2%80%94%204%20October/reserve\" class=\"FestivalTickets-module__LpTyiG__buySingle\" target=\"_blank\" rel=\"noreferrer\" aria-label=\"Buy tickets for Cypriot Greek Line-up, Sun 4 Oct 19:30 at Sto Dromo Bar (opens RSRVIN in a new tab)\">Buy tickets<!-- --> ↗</a><small>Price &amp; availability on RSRVIN</small></div></li><li class=\"FestivalTickets-module__LpTyiG__individualCard\" id=\"ticket-sun-da-vinci-russian-lineup\" lang=\"ru\"><a class=\"FestivalTickets-module__LpTyiG__miniPoster\" tabindex=\"-1\" aria-hidden=\"true\" href=\"/festival/shows/sun-da-vinci-russian-lineup\"><img alt=\"\" loading=\"lazy\" width=\"1600\" height=\"2000\" decoding=\"async\" data-nimg=\"1\" style=\"color:transparent\" sizes=\"(max-width: 650px) 72px, 96px\" srcSet=\"/responsive/726e2992ed4fe7a3e49c-160.webp 160w, /responsive/726e2992ed4fe7a3e49c-320.webp 320w, /responsive/726e2992ed4fe7a3e49c-640.webp 640w, /responsive/726e2992ed4fe7a3e49c-960.webp 960w, /responsive/726e2992ed4fe7a3e49c-1600.webp 1600w, /responsive/726e2992ed4fe7a3e49c-1600.webp 2400w\" src=\"/responsive/726e2992ed4fe7a3e49c-1600.webp\"/></a><div class=\"FestivalTickets-module__LpTyiG__individualCopy\"><p class=\"FestivalTickets-module__LpTyiG__showMeta\">19:30<!-- -->–<!-- -->20:30<!-- --> · <!-- -->Da Vinci</p><h3><a href=\"/festival/shows/sun-da-vinci-russian-lineup\">Русский Стендап: Line Up шоу</a></h3><p class=\"FestivalTickets-module__LpTyiG__showLanguage\">Русский</p></div><div class=\"FestivalTickets-module__LpTyiG__individualAction\"><a href=\"https://rsrvin.com/russian-lineup-oct4\" class=\"FestivalTickets-module__LpTyiG__buySingle\" target=\"_blank\" rel=\"noreferrer\" aria-label=\"Купить билет на «Русский Стендап: Line Up шоу», 19:30, Da Vinci (RSRVIN откроется в новой вкладке)\">Купить билет<!-- --> ↗</a><small>Цена и наличие на RSRVIN</small></div></li><li class=\"FestivalTickets-module__LpTyiG__individualCard\" id=\"ticket-sun-theatre-closing\"><a class=\"FestivalTickets-module__LpTyiG__miniPoster\" tabindex=\"-1\" aria-hidden=\"true\" href=\"/festival/shows/sun-theatre-closing\"><img alt=\"\" loading=\"lazy\" width=\"1600\" height=\"2000\" decoding=\"async\" data-nimg=\"1\" style=\"color:transparent\" sizes=\"(max-width: 650px) 72px, 96px\" srcSet=\"/responsive/910fd56b6e8c6038b2ec-160.webp 160w, /responsive/910fd56b6e8c6038b2ec-320.webp 320w, /responsive/910fd56b6e8c6038b2ec-6"
   }
 }
