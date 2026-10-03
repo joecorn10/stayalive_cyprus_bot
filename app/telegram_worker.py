@@ -6,8 +6,10 @@ import time
 from app.config import TELEGRAM_BOT_TOKEN
 from app.telegram import poll_once
 
-WORKER_SECONDS = 240
-SLEEP_SECONDS = 2
+# Keep the worker alive almost for the full GitHub Actions 5-minute schedule
+# window, minimizing the gap in which Telegram updates cannot be received.
+WORKER_SECONDS = 290
+SLEEP_SECONDS = 1
 
 
 def main() -> None:
