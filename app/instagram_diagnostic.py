@@ -31,34 +31,6 @@ def main() -> None:
     print(f"Instagram diagnostic: @{handle}")
     print(f"URL: {url}")
 
-    # Verify which Apify account the GitHub Actions secret actually belongs to.
-    # Never print the token itself.
-    apify_token = os.getenv("APIFY_API_TOKEN", "").strip()
-    if apify_token:
-        try:
-            auth_response = requests.get(
-                "https://api.apify.com/v2/users/me",
-                headers={"Authorization": f"Bearer {apify_token}"},
-                timeout=20,
-            )
-            if auth_response.ok:
-                account = auth_response.json().get("data", {})
-                print(
-                    "Apify token account: "
-                    f"@{account.get('username') or '-'} "
-                    f"(id={account.get('id') or '-'})"
-                )
-            else:
-                print(
-                    "Apify token authentication failed: "
-                    f"HTTP {auth_response.status_code} "
-                    f"{auth_response.text[:200]}"
-                )
-        except requests.RequestException as exc:
-            print(f"Apify token verification failed: {exc}")
-    else:
-        print("Apify token: APIFY_API_TOKEN is not set")
-
     parser = InstagramParser(url)
     posts = _fetch_posts(url)
     if posts is None:
