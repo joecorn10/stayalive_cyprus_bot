@@ -4,40 +4,70 @@ from pathlib import Path
 import requests
 import sys
 from app.handlers import handle_callback, handle_message
+
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
+
 
 def api_call(token: str, method: str, payload: dict | None = None) -> dict:
     url = f"https://api.telegram.org/bot{token}/{method}"
     response = requests.post(url, json=payload or {}, timeout=API_TIMEOUT)
-    response.raise_for_status()
+    if not response.ok:
+        try:
+            details = response.json()
+        except ValueError:
+            details = response.text
+        raise RuntimeError(
+            f"Telegram API HTTP {response.status_code} for {method}: {details}"
+        )
     data = response.json()
     if not data.get("ok"):
-        raise RuntimeError(f"Telegram API error: {data}")
+        raise RuntimeError(f"Telegram API error for {method}: {data}")
     return data
 
-def send_message(token: str, chat_id: int, text: str, reply_markup: dict | None = None) -> int | None:
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+
+def send_message(
+    token: str,
+    chat_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = "HTML",
+) -> int | None:
+    payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
     result = api_call(token, "sendMessage", payload)
     return (result.get("result") or {}).get("message_id")
 
 
-def edit_message(token: str, chat_id: int, message_id: int, text: str, reply_markup: dict | None = None) -> None:
-    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
+def edit_message(
+    token: str,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = "HTML",
+) -> None:
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
     api_call(token, "editMessageText", payload)
+
 
 def load_offset() -> int | None:
     if not STATE_PATH.exists():
         return None
     return json.loads(STATE_PATH.read_text(encoding="utf-8")).get("offset")
 
+
 def save_offset(offset: int) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps({"offset": offset}, indent=2) + "\n", encoding="utf-8")
+
 
 def telegram_diagnostics(token: str) -> None:
     me = api_call(token, "getMe").get("result", {})
@@ -98,16 +128,39 @@ def poll_once(token: str) -> bool:
                 token,
                 chat_id,
                 "🔎 Ищу свежие события…\n\nПроверяю источники, это займёт несколько секунд.",
+                parse_mode=None,
             )
 
         reply_text, keyboard = handle_message(message)
 
         if needs_sync and progress_message_id is not None:
             try:
-                edit_message(token, chat_id, progress_message_id, reply_text, keyboard)
+                edit_message(
+                    token,
+                    chat_id,
+                    progress_message_id,
+                    reply_text,
+                    keyboard,
+                    parse_mode=None,
+                )
             except Exception as exc:
-                print(f"Telegram edit failed, sending result separately: {exc}", file=sys.stderr)
-                send_message(token, chat_id, reply_text, keyboard)
+                print(
+                    f"Telegram edit failed, sending result separately: {exc}",
+                    file=sys.stderr,
+                )
+                try:
+                    send_message(
+                        token,
+                        chat_id,
+                        reply_text,
+                        keyboard,
+                        parse_mode=None,
+                    )
+                except Exception as send_exc:
+                    print(
+                        f"Telegram fallback send failed: {send_exc}",
+                        file=sys.stderr,
+                    )
         else:
             send_message(token, chat_id, reply_text, keyboard)
     if latest_offset is not None:
