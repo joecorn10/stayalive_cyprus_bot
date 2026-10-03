@@ -73,3 +73,5 @@ def poll_once(token: str) -> bool:
         print(f"Telegram poll: saved offset={latest_offset}")
         return True
     return False
+
+# Diagnostic run trigger.
