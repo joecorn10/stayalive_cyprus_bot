@@ -14,6 +14,7 @@ from app.parsers.aggregator import AggregatorParser
 from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
 from app.parsers.instagram import InstagramParser
 from app.parsers.soldout import SoldOutParser
+from app.parsers.music_sites import MusicSiteParser
 from app.parsers.telegram import TelegramParser
 from app.parsers.telegram_pinned import TelegramPinnedParser
 from app.translator import translate_event
@@ -165,6 +166,8 @@ def _parse_source(source) -> list[dict]:
         return CyproplanParser().parse()
     if name == "SoldOut TicketBox":
         return SoldOutParser(source["url"]).parse()
+    if name in {"Music Hall", "Live Music Zone"}:
+        return MusicSiteParser(source["url"]).parse()
     if name == "EventOr":
         return AggregatorParser(source["url"], "EventOr").parse()
     if name == "Cyprus.BZ":
