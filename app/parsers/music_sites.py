@@ -64,7 +64,8 @@ class MusicSiteParser(EventParser):
     @staticmethod
     def _date(line: str):
         match = re.search(
-            r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b(?:[^0-9]{0,8}(\d{1,2}):(\d{2}))?",
+            r"\b(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?\b"
+            r"(?:[^0-9]{0,10}(\d{1,2}):(\d{2}))?",
             line,
         )
         if not match:
@@ -92,26 +93,28 @@ class MusicSiteParser(EventParser):
             "reserve", "image", "menu", "contacts", "gallery",
         }
 
-        for offset in range(1, 8):
-            pos = index - offset
-            if pos < 0:
-                break
+        # Event cards may render as title -> date or date -> title.
+        for direction in (-1, 1):
+            for offset in range(1, 8):
+                pos = index + direction * offset
+                if pos < 0 or pos >= len(lines):
+                    break
 
-            value = lines[pos].strip()
-            lower = value.casefold()
+                value = lines[pos].strip()
+                lower = value.casefold()
 
-            if not value or lower in skip:
-                continue
-            if value.startswith(("http://", "https://", "t.me/")):
-                continue
-            if re.fullmatch(r"[\d/:.\-–— ]+", value):
-                continue
-            if any(x in lower for x in ("buy ticket", "купить билет", "reserve", "follow up")):
-                continue
-            if len(value) > 120 or len(value.split()) > 16:
-                continue
+                if not value or lower in skip:
+                    continue
+                if value.startswith(("http://", "https://", "t.me/")):
+                    continue
+                if re.fullmatch(r"[\d/:.\-–— ]+", value):
+                    continue
+                if any(x in lower for x in ("buy ticket", "купить билет", "reserve", "follow up")):
+                    continue
+                if len(value) > 120 or len(value.split()) > 16:
+                    continue
 
-            return value.strip(" -—:|")
+                return value.strip(" -—:|")
 
         return ""
 
