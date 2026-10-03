@@ -35,7 +35,11 @@ def poll_once(token: str) -> bool:
     payload = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
     if offset is not None:
         payload["offset"] = offset
+    print(f"Telegram poll: offset={offset}, allowed_updates={payload['allowed_updates']}")
     updates = api_call(token, "getUpdates", payload).get("result", [])
+    print(f"Telegram poll: received {len(updates)} update(s)")
+    if updates:
+        print("Telegram update ids:", [update.get("update_id") for update in updates])
     if not updates:
         return False
     latest_offset = offset
@@ -43,6 +47,7 @@ def poll_once(token: str) -> bool:
         latest_offset = update["update_id"] + 1
         callback = update.get("callback_query")
         if callback:
+            print(f"Telegram callback: id={callback.get('id')}")
             chat_id, reply_text, keyboard = handle_callback(callback)
             api_call(token, "answerCallbackQuery", {"callback_query_id": callback["id"]})
             if chat_id is not None:
@@ -51,7 +56,13 @@ def poll_once(token: str) -> bool:
 
         message = update.get("message")
         if not message:
+            print(f"Telegram update {update.get('update_id')} has no message/callback")
             continue
+        print(
+            f"Telegram message: update_id={update.get('update_id')}, "
+            f"chat_id={(message.get('chat') or {}).get('id')}, "
+            f"text={message.get('text', '')!r}"
+        )
         chat_id = (message.get("chat") or {}).get("id")
         if chat_id is None:
             continue
@@ -59,5 +70,6 @@ def poll_once(token: str) -> bool:
         send_message(token, chat_id, reply_text, keyboard)
     if latest_offset is not None:
         save_offset(latest_offset)
+        print(f"Telegram poll: saved offset={latest_offset}")
         return True
     return False
