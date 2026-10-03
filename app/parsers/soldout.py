@@ -120,7 +120,7 @@ class SoldOutParser(EventParser):
 
 
 def _extract_telegram_event(text: str):
-    value = re.sub(r"\\s+", " ", text).strip()
+    value = "\n".join(re.sub(r"[ \\t]+", " ", line).strip() for line in text.splitlines() if line.strip())
 
     # SoldOut channel posts consistently use:
     # ➡️ DD/MM/YYYY[-DD/MM/YYYY]: VENUE
