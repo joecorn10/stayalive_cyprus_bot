@@ -9,6 +9,7 @@ from app.database import (
     database_stats,
     get_chat_state,
     init_db,
+    get_event,
     list_events,
     list_event_sources,
     list_recent_events,
@@ -74,7 +75,17 @@ def _category_icon(category: str) -> str:
     return "✨"
 
 
-def format_events(title: str, events) -> str:
+def _events_keyboard(events) -> dict:
+    buttons = []
+    for event in events[:30]:
+        label = str(event["title"]).strip()
+        if len(label) > 28:
+            label = label[:27].rstrip() + "…"
+        buttons.append([{"text": f"ℹ️ {label}", "callback_data": f"event:{event['id']}"}])
+    return {"inline_keyboard": buttons}
+
+
+def format_events(title: str, events) -> tuple[str, dict | None]:
     if not events:
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
 
@@ -114,11 +125,46 @@ def format_events(title: str, events) -> str:
                 if source["name"] not in names:
                     names.append(source["name"])
             lines.append("📚 " + " · ".join(names))
-        if event["ticket_url"]:
-            lines.append(f"🔗 {event['ticket_url']}")
         lines.append("")
 
-    return "\n".join(lines).rstrip()
+    return "\n".join(lines).rstrip(), _events_keyboard(events)
+
+
+def format_event_details(event) -> tuple[str, dict | None]:
+    if not event:
+        return "Не нашёл это событие. Возможно, оно уже исчезло из источника.", None
+
+    lines = [f"{_category_icon(event['category'])} {event['title']}", ""]
+    lines.append(f"📅 {_date_label(event['date'])}")
+    if event["end_date"] and event["end_date"] != event["date"]:
+        lines.append(f"↳ до {_date_label(event['end_date'])}")
+    if event["time"]:
+        lines.append(f"🕐 {event['time']}")
+    if event["venue"]:
+        lines.append(f"📍 {event['venue']}")
+    elif event["city"]:
+        lines.append(f"📍 {event['city']}")
+    if event["price"]:
+        lines.append(f"💶 {event['price']}")
+
+    sources = list_event_sources(event["id"])
+    if sources:
+        names = []
+        for source in sources:
+            if source["name"] not in names:
+                names.append(source["name"])
+        lines.append(f"📚 {' · '.join(names)}")
+
+    if event["description"]:
+        description = " ".join(str(event["description"]).split())
+        if len(description) > 1200:
+            description = description[:1197].rstrip() + "…"
+        lines.extend(["", description])
+
+    keyboard = None
+    if event["ticket_url"]:
+        keyboard = {"inline_keyboard": [[{"text": "🎟 Билеты / источник", "url": event["ticket_url"]}]]}
+    return "\n".join(lines), keyboard
 
 
 def format_status() -> str:
@@ -180,6 +226,19 @@ def handle_add_source(chat_id: int, text: str) -> str:
     return "✅ Источник добавлен\n\n" + "\n".join(details)
 
 
+def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
+    data = (callback.get("data") or "").strip()
+    message = callback.get("message") or {}
+    chat_id = (message.get("chat") or {}).get("id")
+    if not data.startswith("event:"):
+        return chat_id, "Неизвестное действие.", None
+    try:
+        event_id = int(data.split(":", 1)[1])
+    except ValueError:
+        return chat_id, "Не удалось открыть событие.", None
+    return chat_id, *format_event_details(get_event(event_id))
+
+
 def handle_message(message: dict) -> tuple[str, dict]:
     init_db()
     text = (message.get("text") or "").strip()
@@ -203,13 +262,15 @@ def handle_message(message: dict) -> tuple[str, dict]:
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
         today = cyprus_today()
-        return format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat())), main_menu()
+        text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()))
+        return text, keyboard or main_menu()
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
         today = cyprus_today()
         end = today + timedelta(days=6)
-        return format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat())), main_menu()
+        text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
+        return text, keyboard or main_menu()
 
     if text == "📚 Источники":
         set_chat_state(chat_id, "idle")
