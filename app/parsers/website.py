@@ -77,6 +77,12 @@ class WebsiteParser(EventParser):
         events: list[dict] = []
         current_date: str | None = None
         pending: tuple[str, str, str] | None = None
+        ticket_links: list[str] = [
+            urljoin(self.url, a.get("href", "").strip())
+            for a in soup.find_all("a")
+            if a.get("href") and re.search(r"buy\s*tickets|купить\s*билет", a.get_text(" ", strip=True), re.I)
+        ]
+        ticket_index = 0
 
         for line in lines:
             date_match = date_re.match(line)
@@ -99,6 +105,8 @@ class WebsiteParser(EventParser):
                 continue
 
             start_time, _, venue = pending
+            if ticket_index < len(ticket_links):
+                ticket_index += 1
             events.append({
                 "title": line[:200],
                 "description": "",
@@ -108,7 +116,7 @@ class WebsiteParser(EventParser):
                 "venue": venue[:200],
                 "city": "Limassol" if "limassol" in text.lower() else "",
                 "price": "",
-                "ticket_url": "",
+                "ticket_url": ticket_links[ticket_index] if ticket_index < len(ticket_links) else "",
                 "source_url": self.url,
                 "image_url": "",
                 "category": "События",
