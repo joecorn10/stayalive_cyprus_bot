@@ -1,0 +1,29 @@
+name: Instagram diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Instagram profile URL
+        required: true
+        default: https://www.instagram.com/zebra_limassol/
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Instagram diagnostic
+        env:
+          INSTAGRAM_DIAGNOSTIC_URL: ${{ inputs.url }}
+        run: python -m app.instagram_diagnostic
