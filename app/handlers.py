@@ -10,6 +10,7 @@ from app.database import (
     get_chat_state,
     init_db,
     list_events,
+    list_event_sources,
     list_recent_events,
     list_sources,
     set_chat_state,
@@ -106,6 +107,13 @@ def format_events(title: str, events) -> str:
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
 
+        sources = list_event_sources(event["id"])
+        if sources:
+            names = []
+            for source in sources:
+                if source["name"] not in names:
+                    names.append(source["name"])
+            lines.append("📚 " + " · ".join(names))
         if event["ticket_url"]:
             lines.append(f"🔗 {event['ticket_url']}")
         lines.append("")
