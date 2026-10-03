@@ -69,7 +69,7 @@ class WebsiteParser(EventParser):
             "title": title[:200],
             "description": re.sub(r"\s+", " ", str(item.get("description") or "")).strip()[:4000],
             "date": dates[0],
-            "end_date": end_dates[0] if end_dates else dates[1],
+            "end_date": _end_date(end_dates, dates),
             "time": _time(start_raw),
             "venue": venue[:200],
             "city": city[:100],
@@ -83,3 +83,4 @@ class WebsiteParser(EventParser):
 def _time(value: str) -> str:
     m = re.search(r"T(\d{2}:\d{2})", value)
     return m.group(1) if m else ""
+\n\ndef _end_date(end_dates, start_dates):\n    if end_dates:\n        return end_dates[1] if len(end_dates) > 1 else end_dates[0]\n    return start_dates[1] if len(start_dates) > 1 else start_dates[0]\n
