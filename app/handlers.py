@@ -16,12 +16,10 @@ from app.database import (
     list_recent_events,
     list_sources,
     set_chat_state,
-    cache_is_fresh,
-    mark_cache_fresh,
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
-from app.sync import canonical_category, sync_all
+from app.sync import canonical_category
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -308,7 +306,6 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
     return chat_id, *format_event_details(get_event(event_id))
 
 
-_SYNC_IN_PROGRESS = False
 
 def handle_message(message: dict) -> tuple[str, dict]:
     init_db()
@@ -330,21 +327,9 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         return format_status(), main_menu()
 
-    global _SYNC_IN_PROGRESS
-    if text == "📅 Сегодня":
+        if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        if _SYNC_IN_PROGRESS:
-            return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
-        if not cache_is_fresh("events", ttl_minutes=30):
-            _SYNC_IN_PROGRESS = True
-            try:
-                print("On-demand event sync: cache expired")
-                sync_all()
-                mark_cache_fresh("events")
-            finally:
-                _SYNC_IN_PROGRESS = False
-        else:
-            print("On-demand event sync: using fresh cache")
+        print("Telegram event request: using daily SQLite snapshot")
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -355,18 +340,7 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        if _SYNC_IN_PROGRESS:
-            return "⏳ Я уже обновляю события. Подожди пару секунд и повтори.", main_menu()
-        if not cache_is_fresh("events", ttl_minutes=30):
-            _SYNC_IN_PROGRESS = True
-            try:
-                print("On-demand event sync: cache expired")
-                sync_all()
-                mark_cache_fresh("events")
-            finally:
-                _SYNC_IN_PROGRESS = False
-        else:
-            print("On-demand event sync: using fresh cache")
+        print("Telegram event request: using daily SQLite snapshot")
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
