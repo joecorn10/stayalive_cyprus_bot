@@ -24,7 +24,7 @@ HEADERS = {
 LINK_PATTERNS = {
     "EventOr": re.compile(r"^https?://(?:www\.)?eventor\.com\.cy/events?/[^?#]+", re.I),
     "Cyprus.BZ": re.compile(r"^https?://(?:www\.)?cyprus\.bz/(?:ru/)?events?/[^?#]+", re.I),
-    "More.com": re.compile(r"^https?://(?:www\\.)?more\\.com/cy-(?:en|el)/tickets/[^?#]+", re.I),
+    "More.com": re.compile(r"^https?://(?:www\.)?more\.com/cy-(?:en|el)/tickets/[^?#]+", re.I),
 }
 
 
@@ -97,7 +97,7 @@ class AggregatorParser(EventParser):
             self.source_name,
             len(links),
             len(unique),
-        )
+        )\n        print(\n            f"{self.source_name} discovery: {len(links)} event links, {len(unique)} parsed events",\n            flush=True,\n        )
         return unique
 
 
