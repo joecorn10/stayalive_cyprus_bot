@@ -275,6 +275,22 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         }
         category = category_map.get(slug)
         if not category:
+            # Backward compatibility with buttons created before short slugs.
+            category = canonical_category(slug)
+            if not category:
+                legacy_map = {
+                    "Музыка": "🎵 Музыка",
+                    "Фестиваль": "🎪 Фестивали",
+                    "Фестивали": "🎪 Фестивали",
+                    "Nightlife": "🪩 Nightlife",
+                    "Театр и кино": "🎭 Театр и кино",
+                    "Спорт и outdoor": "🏃 Спорт и outdoor",
+                    "Маркеты и шопинг": "🛍 Маркеты и шопинг",
+                    "Семья": "👨‍👩‍👧 Семья",
+                    "Другое": "✨ Другое",
+                }
+                category = legacy_map.get(slug)
+        if not category:
             return chat_id, "Неизвестное направление.", None
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
