@@ -238,6 +238,12 @@ def _source_root(url: str) -> str:
     return url
 
 
+def get_event(event_id: int):
+    init_db()
+    with get_connection() as conn:
+        return conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+
+
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     init_db()
     with get_connection() as conn:
