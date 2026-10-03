@@ -640,17 +640,7 @@ def _canonical_profile_url(url: str) -> str:
 
 def _looks_like_event(text: str) -> bool:
     """Return True when the caption is actually promoting an event."""
-    if not (
-        EVENT_WORDS.search(text)
-        or TIME_RE.search(text)
-        or re.search(
-            r"\b(?:every|each|this|next)\s+"
-            r"(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|"
-            r"fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b",
-            text,
-            re.I,
-        )
-    ):
+    if not (EVENT_WORDS.search(text) or TIME_RE.search(text)):
         return False
 
     external_place = re.search(
