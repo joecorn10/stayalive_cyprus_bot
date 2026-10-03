@@ -3,14 +3,14 @@ name: Telegram bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "* * * * *"
 
 permissions:
   contents: write
 
 concurrency:
   group: stayalive-cyprus-bot
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   bot:
