@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import requests
-from app.handlers import handle_message
+from app.handlers import handle_callback, handle_message
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
 
@@ -32,7 +32,7 @@ def save_offset(offset: int) -> None:
 
 def poll_once(token: str) -> bool:
     offset = load_offset()
-    payload = {"timeout": 10, "allowed_updates": ["message"]}
+    payload = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
     if offset is not None:
         payload["offset"] = offset
     updates = api_call(token, "getUpdates", payload).get("result", [])
@@ -41,6 +41,14 @@ def poll_once(token: str) -> bool:
     latest_offset = offset
     for update in updates:
         latest_offset = update["update_id"] + 1
+        callback = update.get("callback_query")
+        if callback:
+            chat_id, reply_text, keyboard = handle_callback(callback)
+            api_call(token, "answerCallbackQuery", {"callback_query_id": callback["id"]})
+            if chat_id is not None:
+                send_message(token, chat_id, reply_text, keyboard)
+            continue
+
         message = update.get("message")
         if not message:
             continue
