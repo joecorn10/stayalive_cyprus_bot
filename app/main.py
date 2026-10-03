@@ -1,9 +1,15 @@
 """Application entry point."""
 
+from app.config import TELEGRAM_BOT_TOKEN
+from app.telegram import run_polling
+
 
 def main() -> None:
-    """Start the bot application."""
-    raise NotImplementedError("Bot startup will be added in the next step.")
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN is not set. Add it to your environment before starting the bot."
+        )
+    run_polling(TELEGRAM_BOT_TOKEN)
 
 
 if __name__ == "__main__":
