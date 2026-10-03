@@ -121,8 +121,13 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             lines.append("")
             current_day = day_key
         title = escape(str(event["title"]))
-        # Keep the category list clean: event titles must not create Telegram link previews.
-        lines.append(f"• {title}")
+        source_url = str(event["source_url"] or "").strip()
+        if source_url:
+            # The event title itself is the source link.
+            # This keeps the list compact and avoids separate event URL buttons.
+            lines.append(f'• <a href="{escape(source_url, quote=True)}">{title}</a>')
+        else:
+            lines.append(f"• {title}")
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
@@ -137,7 +142,8 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-    return "\n".join(lines).rstrip(), event_keyboard(selected[:30], period, category)
+    # No separate event URL buttons: the title links above are the only event links.
+    return "\n".join(lines).rstrip(), back_keyboard(period)
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
