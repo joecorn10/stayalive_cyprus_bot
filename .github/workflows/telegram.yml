@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: stayalive-cyprus-bot
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   bot:
@@ -38,7 +38,7 @@ jobs:
 
       - name: Run Telegram worker
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_BOT_TOKEN }}
         run: python -m app.telegram_worker
 
       - name: Save database and Telegram offset
@@ -55,8 +55,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # The bot state is shared through git. Retry the rebase/push because
-          # another scheduled worker may have persisted state meanwhile.
           for attempt in 1 2 3; do
             git commit -m "chore: persist bot state" || true
             git pull --rebase origin main || {
