@@ -101,11 +101,61 @@ def poll_once(token: str) -> bool:
         latest_offset = update["update_id"] + 1
         callback = update.get("callback_query")
         if callback:
-            print(f"Telegram callback: id={callback.get('id')}")
-            chat_id, reply_text, keyboard = handle_callback(callback)
-            api_call(token, "answerCallbackQuery", {"callback_query_id": callback["id"]})
-            if chat_id is not None:
-                send_message(token, chat_id, reply_text, keyboard)
+            callback_id = callback.get("id")
+            data = (callback.get("data") or "").strip()
+            message = callback.get("message") or {}
+            callback_chat_id = (message.get("chat") or {}).get("id")
+            message_id = message.get("message_id")
+            print(
+                "Telegram callback: "
+                f"id={callback_id} chat_id={callback_chat_id} "
+                f"message_id={message_id} data={data!r}"
+            )
+            try:
+                chat_id, reply_text, keyboard = handle_callback(callback)
+                api_call(
+                    token,
+                    "answerCallbackQuery",
+                    {"callback_query_id": callback_id},
+                )
+                if chat_id is not None:
+                    if message_id is not None:
+                        try:
+                            edit_message(
+                                token,
+                                chat_id,
+                                message_id,
+                                reply_text,
+                                keyboard,
+                            )
+                            print(
+                                "Telegram callback handled by editing message: "
+                                f"chat_id={chat_id} message_id={message_id}"
+                            )
+                        except Exception as edit_exc:
+                            print(
+                                f"Telegram callback edit failed: {edit_exc}",
+                                file=sys.stderr,
+                            )
+                            send_message(token, chat_id, reply_text, keyboard)
+                    else:
+                        send_message(token, chat_id, reply_text, keyboard)
+            except Exception as exc:
+                print(
+                    f"Telegram callback failed for data={data!r}: {exc}",
+                    file=sys.stderr,
+                )
+                try:
+                    api_call(
+                        token,
+                        "answerCallbackQuery",
+                        {
+                            "callback_query_id": callback_id,
+                            "text": "Не удалось открыть. Попробуй ещё раз.",
+                        },
+                    )
+                except Exception:
+                    pass
             continue
 
         message = update.get("message")
