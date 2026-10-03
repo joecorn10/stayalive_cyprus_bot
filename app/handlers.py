@@ -63,7 +63,6 @@ def _date_label(value: str) -> str:
 
 
 def _event_active_on(event, day: date) -> bool:
-    """Return True when a dated event is active on the given calendar day."""
     start = datetime.fromisoformat(event["date"]).date()
     end = (
         datetime.fromisoformat(event["end_date"]).date()
@@ -94,7 +93,7 @@ def format_events(
     display_date: date | None = None,
 ) -> tuple[str, dict | None]:
     if not events:
-        return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
+        return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎", None
 
     lines = [title, ""]
     current_day = None
@@ -107,8 +106,6 @@ def format_events(
             else event_date
         )
 
-        # In the "Today" view, a multi-day event should be grouped under
-        # today rather than under the date when it originally started.
         if display_date and _event_active_on(event, display_date):
             day_key = display_date.isoformat()
         else:
@@ -121,17 +118,17 @@ def format_events(
             lines.append("")
             current_day = day_key
 
-        lines.append(f"{_category_icon(event['category'])} {escape(str(event['title']))}")
+        lines.append(f"{_category_icon(event['category'])} {str(event['title'])}")
 
         meta = []
         if event["time"]:
-            meta.append(f"🕐 {escape(str(event['time']))}")
+            meta.append(f"🕐 {str(event['time'])}")
         if event["venue"]:
-            meta.append(f"📍 {escape(str(event['venue']))}")
+            meta.append(f"📍 {str(event['venue'])}")
         elif event["city"]:
-            meta.append(f"📍 {escape(str(event['city']))}")
+            meta.append(f"📍 {str(event['city'])}")
         if event["price"]:
-            meta.append(f"💶 {escape(str(event['price']))}")
+            meta.append(f"💶 {str(event['price'])}")
         if meta:
             lines.append(" · ".join(meta))
 
@@ -149,10 +146,10 @@ def format_events(
             for source in sources:
                 if source["name"] not in names:
                     names.append(source["name"])
-            lines.append("📚 " + escape(" · ".join(names)))
+            lines.append("📚 " + " · ".join(names))
         lines.append("")
 
-    return escape("\n".join(lines).rstrip(), quote=False), None
+    return "\n".join(lines).rstrip(), None
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
