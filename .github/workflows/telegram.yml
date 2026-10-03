@@ -18,16 +18,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
+
       - name: Process Telegram updates
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.main
+
       - name: Save database and Telegram offset
         run: |
           git add events.db data/telegram_offset.json
@@ -38,14 +42,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: persist bot state"
-          git push
-        run: |
-          if git diff --quiet -- data/telegram_offset.json; then
-            echo "No offset changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/telegram_offset.json
-          git commit -m "chore: update Telegram offset"
           git push
