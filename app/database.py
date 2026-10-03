@@ -78,6 +78,7 @@ def init_db() -> None:
         seed_sources = [
             ("Cyproplan", "https://cyproplan.com/", "Website", "Cyprus event aggregator"),
             ("ETKO Cyprus", "https://etkocyprus.com/events", "Website", "Events, concerts and parties"),
+            ("Cyprus Comic Con", "https://cypruscomiccon.org/events/", "Website", "Cyprus Comic Con events"),
             ("SoldOut TicketBox", "https://www.soldoutticketbox.com/en/home", "Website", "Ticketing and event listings"),
             ("Cyprus Journal Music", "https://t.me/cyprusjournalmusic", "Telegram", "Music and events in Cyprus"),
             ("Cyprus Beer Events", "https://t.me/cyprusBeerEvents", "Telegram", "Beer and events in Cyprus"),
