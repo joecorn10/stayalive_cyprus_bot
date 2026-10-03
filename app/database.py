@@ -1,4 +1,4 @@
-""""SQLite database layer."""
+"""SQLite database layer."""
 
 import sqlite3
 from pathlib import Path
@@ -31,6 +31,25 @@ def init_db() -> None:
                 last_checked_at TEXT,
                 last_success_at TEXT,
                 last_error TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                category TEXT,
+                date TEXT NOT NULL,
+                time TEXT,
+                venue TEXT,
+                city TEXT,
+                price TEXT,
+                ticket_url TEXT,
+                source_url TEXT NOT NULL,
+                image_url TEXT,
+                content_hash TEXT UNIQUE,
+                first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.execute("""
@@ -86,6 +105,47 @@ def add_source(
         )
         conn.commit()
         return cursor.rowcount == 1
+
+
+def upsert_events(events: list[dict]) -> int:
+    init_db()
+    added = 0
+    with get_connection() as conn:
+        for event in events:
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO events
+                   (title, description, category, date, time, venue, city,
+                    price, ticket_url, source_url, image_url, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    event.get("title", ""),
+                    event.get("description", ""),
+                    event.get("category", ""),
+                    event.get("date", ""),
+                    event.get("time", ""),
+                    event.get("venue", ""),
+                    event.get("city", ""),
+                    event.get("price", ""),
+                    event.get("ticket_url", ""),
+                    event.get("source_url", ""),
+                    event.get("image_url", ""),
+                    event.get("content_hash"),
+                ),
+            )
+            added += cursor.rowcount
+        conn.commit()
+    return added
+
+
+def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
+    init_db()
+    with get_connection() as conn:
+        return conn.execute(
+            """SELECT * FROM events
+               WHERE date BETWEEN ? AND ?
+               ORDER BY date, time, title COLLATE NOCASE""",
+            (start_date, end_date),
+        ).fetchall()
 
 
 def get_chat_state(chat_id: int) -> str:
