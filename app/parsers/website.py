@@ -70,7 +70,7 @@ class WebsiteParser(EventParser):
         }
 
         default_year = datetime.now().year
-        year_match = re.search(r"\b(20\\d{2})\\b", text)
+        year_match = re.search(r"\b(20\d{2})\b", text)
         if year_match:
             default_year = int(year_match.group(1))
 
