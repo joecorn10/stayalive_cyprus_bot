@@ -103,6 +103,7 @@ def init_db() -> None:
             ("Poly Limassol", "https://www.instagram.com/poly.limassol/", "Instagram", "Limassol events and culture"),
             ("Kolla Cyprus", "https://www.instagram.com/kolla.cy/", "Instagram", "Cyprus events and community"),
             ("ETKO Limassol", "https://instagram.com/etko_limassol", "Instagram", "Events, concerts and electronic music"),
+            ("artUS Cyprus", "https://artuscy.com/", "Website", "Art events, exhibitions and creative workshops"),
             ("Facebook Cyprus Discovery", "site:facebook.com/events Cyprus (Limassol OR Nicosia OR Larnaca OR Paphos) event", "FacebookDiscovery", "Public Facebook events discovered through search indexing"),
         ]
         conn.executemany(
