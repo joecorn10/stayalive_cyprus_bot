@@ -62,6 +62,17 @@ def _date_label(value: str) -> str:
     return f"{date.day} {MONTH_NAMES[date.month]}, {WEEKDAYS[date.weekday()]}"
 
 
+def _event_active_on(event, day: date) -> bool:
+    """Return True when a dated event is active on the given calendar day."""
+    start = datetime.fromisoformat(event["date"]).date()
+    end = (
+        datetime.fromisoformat(event["end_date"]).date()
+        if event["end_date"]
+        else start
+    )
+    return start <= day <= end
+
+
 def _category_icon(category: str) -> str:
     category = (category or "").lower()
     if "музык" in category or "concert" in category:
@@ -98,7 +109,7 @@ def format_events(
 
         # In the "Today" view, a multi-day event should be grouped under
         # today rather than under the date when it originally started.
-        if display_date and event_date <= display_date <= end_date:
+        if display_date and _event_active_on(event, display_date):
             day_key = display_date.isoformat()
         else:
             day_key = event["date"]
