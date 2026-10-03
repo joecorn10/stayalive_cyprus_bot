@@ -2,6 +2,12 @@ name: Telegram bot
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "data/telegram_offset.json"
+      - "events.db"
   schedule:
     - cron: "*/5 * * * *"
 
