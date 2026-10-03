@@ -122,6 +122,23 @@ def _normalize(events: list[dict]) -> list[dict]:
         normalized.append(event)
     return normalized
 
+def recategorize_existing_events() -> int:
+    """Reclassify stored events using the current category rules."""
+    from app.database import get_connection
+
+    changed = 0
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM events").fetchall()
+        for row in rows:
+            event = dict(row)
+            category = classify_event(event)
+            if category != (row["category"] or ""):
+                conn.execute("UPDATE events SET category = ? WHERE id = ?", (category, row["id"]))
+                changed += 1
+        conn.commit()
+    return changed
+
+
 def _parse_source(source) -> list[dict]:
     name = source["name"]
     if name == "ETKO Cyprus":
