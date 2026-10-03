@@ -164,7 +164,7 @@ def format_event_details(event) -> tuple[str, dict | None]:
                 names.append(source["name"])
         lines.append(f"📚 {escape(' · '.join(names))}")
 
-    source_url = str(event.get("source_url") or "").strip()
+    source_url = str(event["source_url"] or "").strip()
     if source_url:
         lines.append(f'🔗 <a href="{escape(source_url, quote=True)}">Источник события</a>')
 
