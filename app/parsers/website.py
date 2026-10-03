@@ -119,7 +119,7 @@ class WebsiteParser(EventParser):
                 "ticket_url": ticket_url,
                 "source_url": self.url,
                 "image_url": "",
-                "category": "События",
+                "category": _website_category(line),
             })
             pending = None
 
@@ -164,8 +164,15 @@ class WebsiteParser(EventParser):
             "ticket_url": str(offers.get("url") or "").strip() if isinstance(offers, dict) else "",
             "source_url": urljoin(self.url, str(item.get("url") or self.url)),
             "image_url": str(image),
-            "category": "События",
+            "category": _website_category(title),
         }
+
+def _website_category(text: str) -> str:
+    value = str(text or "")
+    if re.search(r"(?i)\\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комеди|юмор)\\b", value):
+        return "🎭 Comedy"
+    return "События"
+
 
 def _time(value: str) -> str:
     m = re.search(r"T(\d{2}:\d{2})", value)
