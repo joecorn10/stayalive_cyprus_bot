@@ -100,6 +100,8 @@ def detect_name(url: str, source_type: str) -> str:
         "cyproplan.com": "Cyproplan",
         "soldoutticketbox.com": "SoldOut TicketBox",
         "stantarkkomety.com": "Stantar Kkomety",
+        "musichall.cy": "Music Hall",
+        "livemusiczone.fun": "Live Music Zone",
     }
     if host in known:
         return known[host]
