@@ -1,6 +1,6 @@
 """Telegram reply and inline keyboards."""
 
-def main_menu() -> dict:
+def main_menu(input_field_placeholder: str = "Выбери действие…") -> dict:
     return {
         "keyboard": [
             [{"text": "📅 Сегодня"}, {"text": "🗓 На этой неделе"}],
@@ -8,6 +8,7 @@ def main_menu() -> dict:
         ],
         "resize_keyboard": True,
         "is_persistent": True,
+        "input_field_placeholder": input_field_placeholder,
     }
 
 def category_slug(category: str) -> str:
