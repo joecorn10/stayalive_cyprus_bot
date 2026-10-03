@@ -38,6 +38,12 @@ def normalize_url(value: str) -> str:
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return ""
 
+    # Do not treat arbitrary text as a website. Sources must have a real
+    # hostname (for example example.com, instagram.com or t.me).
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if "." not in host:
+        return ""
+
     # Instagram profile links often contain tracking parameters such as
     # ?stkn=.... They do not identify a different source, so keep only the
     # canonical profile path. This also prevents duplicate source records.
