@@ -62,10 +62,15 @@ class AggregatorParser(EventParser):
             seen.add(href)
             links.append(href)
 
-        # The listing pages are dynamic on some aggregators. If they expose
-        # fewer links than expected, still parse any JSON-LD Events directly.
+        # Some aggregators expose complete Event JSON-LD on the listing page,
+        # while others expose individual event links. Parse both paths.
         events = []
-        for href in links[:40]:
+        try:
+            events.extend(_parse_jsonld_events(response.text, self.url))
+        except Exception:
+            logger.exception("%s listing JSON-LD parse failed", self.source_name)
+
+        for href in links[:80]:
             try:
                 events.extend(WebsiteParser(href).parse())
             except requests.RequestException as exc:
@@ -94,3 +99,42 @@ class AggregatorParser(EventParser):
             len(unique),
         )
         return unique
+
+
+def _parse_jsonld_events(html: str, page_url: str) -> list[dict]:
+    import json
+    soup = BeautifulSoup(html, "html.parser")
+    parser = WebsiteParser(page_url)
+    events = []
+    for node in soup.select('script[type="application/ld+json"]'):
+        try:
+            data = json.loads(node.string or node.get_text())
+        except (TypeError, json.JSONDecodeError):
+            continue
+        candidates = []
+        if isinstance(data, dict):
+            if data.get("@type") == "Event":
+                candidates.append(data)
+            graph = data.get("@graph")
+            if isinstance(graph, list):
+                candidates.extend(graph)
+            item_list = data.get("itemListElement")
+            if isinstance(item_list, list):
+                for entry in item_list:
+                    if isinstance(entry, dict):
+                        item = entry.get("item")
+                        if isinstance(item, dict):
+                            candidates.append(item)
+        elif isinstance(data, list):
+            candidates.extend(data)
+
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            types = item.get("@type", [])
+            if "Event" not in (types if isinstance(types, list) else [types]):
+                continue
+            event = parser._event(item)
+            if event:
+                events.append(event)
+    return events
