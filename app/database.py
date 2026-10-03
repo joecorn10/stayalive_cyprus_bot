@@ -112,28 +112,47 @@ def upsert_events(events: list[dict]) -> int:
     added = 0
     with get_connection() as conn:
         for event in events:
-            cursor = conn.execute(
-                """INSERT OR IGNORE INTO events
-                   (title, description, category, date, end_date, time, venue, city,
-                    price, ticket_url, source_url, image_url, content_hash)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    event.get("title", ""),
-                    event.get("description", ""),
-                    event.get("category", ""),
-                    event.get("date", ""),
-                    event.get("end_date") or event.get("date", ""),
-                    event.get("time", ""),
-                    event.get("venue", ""),
-                    event.get("city", ""),
-                    event.get("price", ""),
-                    event.get("ticket_url", ""),
-                    event.get("source_url", ""),
-                    event.get("image_url", ""),
-                    event.get("content_hash"),
-                ),
+            values = (
+                event.get("title", ""),
+                event.get("description", ""),
+                event.get("category", ""),
+                event.get("date", ""),
+                event.get("end_date") or event.get("date", ""),
+                event.get("time", ""),
+                event.get("venue", ""),
+                event.get("city", ""),
+                event.get("price", ""),
+                event.get("ticket_url", ""),
+                event.get("source_url", ""),
+                event.get("image_url", ""),
+                event.get("content_hash"),
             )
-            added += cursor.rowcount
+
+            existing = conn.execute(
+                "SELECT id FROM events WHERE source_url = ? LIMIT 1",
+                (event.get("source_url", ""),),
+            ).fetchone()
+
+            if existing:
+                conn.execute(
+                    """UPDATE events SET
+                       title = ?, description = ?, category = ?, date = ?,
+                       end_date = ?, time = ?, venue = ?, city = ?, price = ?,
+                       ticket_url = ?, image_url = ?, content_hash = ?,
+                       last_seen_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    values[:-1] + (values[-1], existing["id"]),
+                )
+            else:
+                cursor = conn.execute(
+                    """INSERT OR IGNORE INTO events
+                       (title, description, category, date, end_date, time, venue, city,
+                        price, ticket_url, source_url, image_url, content_hash)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    values,
+                )
+                added += cursor.rowcount
+
         conn.commit()
     return added
 
