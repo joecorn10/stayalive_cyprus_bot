@@ -98,7 +98,7 @@ class SoldOutParser(EventParser):
             if not body:
                 continue
 
-            text = " ".join(body.stripped_strings)
+            text = "\n".join(body.stripped_strings)
             parsed = _extract_telegram_event(text)
             if not parsed:
                 continue
@@ -122,11 +122,11 @@ class SoldOutParser(EventParser):
 def _extract_telegram_event(text: str):
     value = "\n".join(re.sub(r"[ \\t]+", " ", line).strip() for line in text.splitlines() if line.strip())
 
-    # SoldOut channel posts consistently use:
-    # ➡️ DD/MM/YYYY[-DD/MM/YYYY]: VENUE
+    # Accept the channel's common date formats: DD/MM/YYYY, DD.MM.YYYY,
+    # and DD-MM-YYYY, optionally as a range, followed by a venue.
     date_match = re.search(
-        r"(?:➡️\s*)?(\d{1,2})/(\d{1,2})/(\d{4})"
-        r"(?:\s*[-–]\s*(\d{1,2})/(\d{1,2})/(\d{4}))?"
+        r"(?:➡️\s*)?(\d{1,2})[./-](\d{1,2})[./-](\d{4})"
+        r"(?:\s*[-–]\s*(\d{1,2})[./-](\d{1,2})[./-](\d{4}))?"
         r"\s*:\s*([^\n🎟]+)",
         value,
     )
