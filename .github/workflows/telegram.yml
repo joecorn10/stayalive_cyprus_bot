@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: stayalive-cyprus-bot
+  group: stayalive-cyprus-state
   cancel-in-progress: false
 
 jobs:
