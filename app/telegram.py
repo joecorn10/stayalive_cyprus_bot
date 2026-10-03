@@ -140,7 +140,6 @@ def poll_once(token: str) -> bool:
                     chat_id,
                     progress_message_id,
                     reply_text,
-                    keyboard,
                     parse_mode=None,
                 )
             except Exception as exc:
