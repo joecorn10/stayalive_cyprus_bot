@@ -68,8 +68,8 @@ CATEGORY_RULES = (
 )
 
 def classify_event(event: dict) -> str:
-    explicit = str(event.get("category") or "").strip()
-    if explicit and explicit not in {"События", "Events"}:
+    explicit = canonical_category(event.get("category"))
+    if explicit:
         return explicit
     text = " ".join(str(event.get(key, "")) for key in ("title", "description", "venue", "city"))
     for category, pattern in CATEGORY_RULES:
