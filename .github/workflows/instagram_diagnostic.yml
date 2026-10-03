@@ -1,6 +1,13 @@
 name: Instagram diagnostic
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/parsers/instagram.py"
+      - "app/instagram_diagnostic.py"
+      - ".github/workflows/instagram_diagnostic.yml"
   workflow_dispatch:
     inputs:
       url:
@@ -25,5 +32,5 @@ jobs:
 
       - name: Run Instagram diagnostic
         env:
-          INSTAGRAM_DIAGNOSTIC_URL: ${{ inputs.url }}
+          INSTAGRAM_DIAGNOSTIC_URL: ${{ inputs.url || 'https://www.instagram.com/zebra_limassol/' }}
         run: python -m app.instagram_diagnostic
