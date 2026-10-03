@@ -290,7 +290,7 @@ def _add_json_post(item, add_post) -> None:
 
 
 def _extract_caption_fragments(raw: str, add_post) -> None:
-    text = raw.replace("\\\\/", "/")
+    text = raw.replace("\\/", "/")
 
     # Match a caption object together with a nearby shortcode/permalink.
     for match in re.finditer(
@@ -314,7 +314,7 @@ def _extract_caption_fragments(raw: str, add_post) -> None:
             try:
                 caption = json.loads(f'"{caption_match.group(1)}"')
             except json.JSONDecodeError:
-                caption = caption_match.group(1).replace("\\\\n", " ")
+                caption = caption_match.group(1).replace("\\n", " ")
         date = date_match.group(1) if date_match else None
         add_post(
             f"https://www.instagram.com/p/{match.group(1)}/",
