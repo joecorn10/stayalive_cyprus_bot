@@ -23,6 +23,10 @@ BASE_URL = "https://cyproplan.com/"
 DISCOVERY_URLS = (
     "https://cyproplan.com/",
     "https://cyproplan.com/index_m",
+    "https://cyproplan.com/events",
+    "https://cyproplan.com/events/",
+    "https://cyproplan.com/event",
+    "https://cyproplan.com/event/",
 )
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; StayAliveCyprusBot/1.0)",
@@ -61,6 +65,8 @@ class CyproplanParser(EventParser):
                 seen_urls.add(href)
                 event_urls.append(href)
 
+        logger.info("Cyproplan discovery: %s event URLs", len(event_urls))
+
         events = []
         for event_url in event_urls:
             try:
@@ -74,6 +80,7 @@ class CyproplanParser(EventParser):
             if event:
                 events.append(event)
 
+        logger.info("Cyproplan parsed: %s events", len(events))
         return events
 
 
