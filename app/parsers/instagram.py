@@ -159,10 +159,11 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
 
 def _extract_posts(page: str, profile_url: str) -> list[dict]:
-    """Extract whatever public post metadata Instagram exposed in the HTML.
+    """Extract public Instagram posts from several HTML/JSON layouts.
 
-    Instagram changes its markup frequently, so use several generic signals:
-    JSON-LD, embedded JSON strings, and visible links/caption text.
+    Instagram changes its profile markup frequently. Do not depend on one
+    internal API or one exact React structure. Prefer structured embedded JSON,
+    then fall back to post URLs plus nearby caption text.
     """
 
     posts: list[dict] = []
@@ -173,45 +174,160 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
             return
         url = _canonical_post_url(url)
         if url in seen_urls:
+            existing = next((item for item in posts if item["url"] == url), None)
+            if existing:
+                if caption and not existing["caption"]:
+                    existing["caption"] = caption
+                if date and not existing["date"]:
+                    existing["date"] = date
             return
         seen_urls.add(url)
         posts.append({"url": url, "caption": caption or "", "date": date})
 
     soup = BeautifulSoup(page, "html.parser")
 
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or script.get_text())
-        except (TypeError, json.JSONDecodeError):
+    # 1. JSON-LD and all embedded JSON objects. Modern Instagram has used
+    # several nested shapes for the same public post data.
+    for script in soup.find_all("script"):
+        raw = script.string or script.get_text() or ""
+        if not raw:
             continue
-        for item in _walk_json(data):
-            if not isinstance(item, dict):
-                continue
-            url = item.get("url") or item.get("contentUrl")
-            caption = item.get("caption") or item.get("description") or ""
-            date = item.get("datePublished") or item.get("uploadDate")
-            if isinstance(url, str):
-                add_post(url, str(caption), str(date) if date else None)
 
+        if script.get("type") == "application/ld+json":
+            try:
+                data = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                data = None
+            if data is not None:
+                for item in _walk_json(data):
+                    _add_json_post(item, add_post)
+
+        # Some script blocks contain JSON with escaped slashes/quotes.
+        try:
+            data = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            data = None
+        if data is not None:
+            for item in _walk_json(data):
+                _add_json_post(item, add_post)
+
+        # If the whole script is not valid JSON, still recover the common
+        # caption/date fields from escaped JSON fragments.
+        _extract_caption_fragments(raw, add_post)
+
+    # 2. Explicit post URLs are still useful even when Instagram does not
+    # expose structured metadata.
     for match in re.finditer(
-        r'https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
+        r'https?://(?:www\\.)?instagram\\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
         page,
         re.I,
     ):
         add_post(match.group(0))
 
-    # Some builds escape URLs inside JSON as \/.
-    escaped = page.replace("\\/", "/")
+    escaped = page.replace("\\\\/", "/")
     for match in re.finditer(
-        r'https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
+        r'https?://(?:www\\.)?instagram\\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?',
         escaped,
         re.I,
     ):
         add_post(match.group(0))
 
-    # Recover captions from nearby JSON fields when present.
+    # 3. A number of builds expose only relative post links.
     for match in re.finditer(
-        r'"(?:caption|text|title)"\s*:\s*"((?:\\.|[^"\\])*)"',
+        r'href=["\\\'](/(?:p|reel|tv)/[A-Za-z0-9_-]+/?)["\\\']',
+        page,
+        re.I,
+    ):
+        add_post(f"https://www.instagram.com{match.group(1)}")
+
+    # 4. Last-resort caption recovery: when a caption is present in the HTML
+    # but is not attached to a structured post object, associate it with the
+    # nearest post URL in the source text.
+    if posts:
+        _attach_nearby_captions(page, posts)
+
+    return posts[:MAX_POSTS]
+
+
+def _add_json_post(item, add_post) -> None:
+    if not isinstance(item, dict):
+        return
+
+    code = item.get("shortcode") or item.get("code")
+    url = item.get("url") or item.get("permalink")
+    if not url and code:
+        url = f"https://www.instagram.com/p/{code}/"
+
+    caption = item.get("caption") or item.get("description") or ""
+    if isinstance(caption, dict):
+        caption = (
+            caption.get("text")
+            or (caption.get("edges") or [{}])[0].get("node", {}).get("text", "")
+            if caption
+            else ""
+        )
+
+    # Legacy GraphQL shape: edge_media_to_caption.edges[0].node.text
+    if not caption:
+        edge = item.get("edge_media_to_caption") or item.get("edge_media_to_caption")
+        if isinstance(edge, dict):
+            edges = edge.get("edges") or []
+            if edges and isinstance(edges[0], dict):
+                caption = (edges[0].get("node") or {}).get("text", "")
+
+    date = (
+        item.get("datePublished")
+        or item.get("uploadDate")
+        or item.get("taken_at_timestamp")
+        or item.get("taken_at")
+    )
+
+    if isinstance(date, (int, float)):
+        date = datetime.fromtimestamp(date).isoformat()
+
+    if isinstance(url, str):
+        add_post(url, str(caption or ""), str(date) if date else None)
+
+
+def _extract_caption_fragments(raw: str, add_post) -> None:
+    text = raw.replace("\\\\/", "/")
+
+    # Match a caption object together with a nearby shortcode/permalink.
+    for match in re.finditer(
+        r'"(?:shortcode|code)"\\s*:\\s*"([A-Za-z0-9_-]+)"(?P<body>.{0,12000})',
+        text,
+        re.I | re.S,
+    ):
+        body = match.group("body")
+        caption_match = re.search(
+            r'"(?:caption|text)"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"',
+            body,
+            re.I,
+        )
+        date_match = re.search(
+            r'"(?:taken_at_timestamp|taken_at|datePublished|uploadDate)"\\s*:\\s*"?([0-9T:+.\\-Z]+)"?',
+            body,
+            re.I,
+        )
+        caption = ""
+        if caption_match:
+            try:
+                caption = json.loads(f'"{caption_match.group(1)}"')
+            except json.JSONDecodeError:
+                caption = caption_match.group(1).replace("\\\\n", " ")
+        date = date_match.group(1) if date_match else None
+        add_post(
+            f"https://www.instagram.com/p/{match.group(1)}/",
+            caption,
+            date,
+        )
+
+
+def _attach_nearby_captions(page: str, posts: list[dict]) -> None:
+    """Associate visible/embedded caption strings with the nearest post URL."""
+    candidates = []
+    for match in re.finditer(
+        r'"(?:caption|text|title)"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"',
         page,
         re.I,
     ):
@@ -219,16 +335,23 @@ def _extract_posts(page: str, profile_url: str) -> list[dict]:
         try:
             caption = json.loads(f'"{raw}"')
         except json.JSONDecodeError:
-            caption = raw.replace("\\n", " ")
-        if not caption:
+            caption = raw.replace("\\\\n", " ")
+        caption = html.unescape(re.sub(r"\\s+", " ", caption)).strip()
+        if len(caption) >= 20:
+            candidates.append((match.start(), caption))
+
+    if not candidates:
+        return
+
+    for post in posts:
+        if post["caption"]:
             continue
-        for post in posts:
-            if not post["caption"]:
-                post["caption"] = caption
-                break
-
-    return posts[:MAX_POSTS]
-
+        marker = page.find(post["url"].replace("https://www.instagram.com", ""))
+        if marker < 0:
+            continue
+        nearby = min(candidates, key=lambda item: abs(item[0] - marker))
+        if abs(nearby[0] - marker) <= 20000:
+            post["caption"] = nearby[1]
 
 def _walk_json(value):
     if isinstance(value, dict):
