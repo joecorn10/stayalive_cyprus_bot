@@ -1,4 +1,4 @@
-"""SQLite database layer."""
+""""SQLite database layer."""
 
 import sqlite3
 from pathlib import Path
@@ -44,6 +44,12 @@ def init_db() -> None:
             ("Cyproplan", "https://cyproplan.com/", "Website", "Cyprus event aggregator"),
             ("ETKO Cyprus", "https://etkocyprus.com/events", "Website", "Events, concerts and parties"),
             ("SoldOut TicketBox", "https://www.soldoutticketbox.com/en/home", "Website", "Ticketing and event listings"),
+            ("Cyprus Journal Music", "https://t.me/cyprusjournalmusic", "Telegram", "Music and events in Cyprus"),
+            ("Cyprus Beer Events", "https://t.me/cyprusBeerEvents", "Telegram", "Beer and events in Cyprus"),
+            ("Cyproplan Telegram", "https://t.me/cyproplan", "Telegram", "Cyproplan events"),
+            ("Cyprus Man Chat", "https://t.me/cyprus_man_chat", "Telegram", "Cyprus community and events"),
+            ("Cyprus Events Group", "https://t.me/+xiXW5YRRXRg1Y2My", "Telegram", "Cyprus events group"),
+            ("ETKO Limassol", "https://instagram.com/etko_limassol", "Instagram", "Events, concerts and electronic music"),
         ]
         conn.executemany(
             """INSERT OR IGNORE INTO sources
