@@ -17,7 +17,7 @@ def api_call(token: str, method: str, payload: dict | None = None) -> dict:
     return data
 
 def send_message(token: str, chat_id: int, text: str, reply_markup: dict | None = None) -> int | None:
-    payload = {"chat_id": chat_id, "text": text}
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
         payload["reply_markup"] = reply_markup
     result = api_call(token, "sendMessage", payload)
@@ -25,7 +25,7 @@ def send_message(token: str, chat_id: int, text: str, reply_markup: dict | None 
 
 
 def edit_message(token: str, chat_id: int, message_id: int, text: str, reply_markup: dict | None = None) -> None:
-    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
         payload["reply_markup"] = reply_markup
     api_call(token, "editMessageText", payload)
