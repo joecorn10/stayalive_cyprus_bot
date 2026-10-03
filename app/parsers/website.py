@@ -45,12 +45,85 @@ class WebsiteParser(EventParser):
                         seen.add(key)
                         events.append(event)
         # Some modern event sites render their programme as semantic HTML instead
-        # of JSON-LD. Fall back to a generic date/time/venue schedule parser.
+        # of JSON-LD. Fall back to a structured card parser first, then the
+        # generic date/time/venue line parser.
         if not events:
             events = self._html_schedule_events(soup)
         return events
 
+    def _card_schedule_events(self, soup: BeautifulSoup) -> list[dict]:
+        """Parse event-card based schedules where time/title are separate DOM nodes."""
+        date_re = re.compile(
+            r"^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+"
+            r"\d{1,2}\s+(?:january|february|march|april|may|june|july|august|"
+            r"september|october|november|december)$",
+            re.I,
+        )
+        meta_re = re.compile(
+            r"^(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*(.+)$"
+        )
+        default_year = datetime.now().year
+        year_match = re.search(r"\b(20\d{2})\b", soup.get_text(" ", strip=True))
+        if year_match:
+            default_year = int(year_match.group(1))
+
+        events = []
+        current_date = None
+
+        for node in soup.find_all(["h2", "li"]):
+            if node.name == "h2":
+                heading = re.sub(r"\s+", " ", node.get_text(" ", strip=True)).strip()
+                if date_re.match(heading):
+                    parsed = parse_event_dates(heading, default_year=default_year)
+                    current_date = parsed[0] if parsed else None
+                continue
+
+            classes = " ".join(node.get("class", []))
+            if "individualCard" not in classes or not current_date:
+                continue
+
+            meta = node.find(class_=re.compile(r"showMeta", re.I))
+            title_node = node.find("h3")
+            if not meta or not title_node:
+                continue
+
+            meta_text = re.sub(r"\s+", " ", meta.get_text(" ", strip=True))
+            match = meta_re.match(meta_text)
+            if not match:
+                continue
+
+            title = re.sub(r"\s+", " ", title_node.get_text(" ", strip=True)).strip()
+            start_time, end_time, venue = match.groups()
+            ticket = node.find(
+                "a",
+                href=True,
+                string=re.compile(r"buy\s*tickets|купить\s*билет", re.I),
+            )
+            if not ticket:
+                ticket = node.find("a", class_=re.compile(r"buySingle", re.I), href=True)
+
+            events.append({
+                "title": title[:200],
+                "description": "",
+                "date": current_date,
+                "end_date": current_date,
+                "time": start_time,
+                "venue": venue[:200],
+                "city": "Limassol" if "limassol" in soup.get_text(" ", strip=True).lower() else "",
+                "price": "",
+                "ticket_url": urljoin(self.url, ticket["href"]) if ticket else "",
+                "source_url": self.url,
+                "image_url": "",
+                "category": _website_category(title),
+            })
+
+        return events
+
     def _html_schedule_events(self, soup: BeautifulSoup) -> list[dict]:
+        card_events = self._card_schedule_events(soup)
+        if card_events:
+            return card_events
+
         text = soup.get_text("\n")
         lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
         lines = [line.lstrip("# ").strip() for line in lines if line.strip()]
