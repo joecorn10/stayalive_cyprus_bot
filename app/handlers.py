@@ -318,9 +318,14 @@ def handle_message(message: dict) -> tuple[str, dict]:
     if chat_id is None:
         return "Не удалось определить чат.", main_menu()
 
-    if text in ("/start", "/help"):
+    # Telegram may deliver commands as /start@bot_username in groups.
+    # Treat both forms as a fresh start and always restore the main menu.
+    command = text.split("@", 1)[0] if text.startswith("/") else text
+    if command in ("/start", "/help"):
         set_chat_state(chat_id, "idle")
-        return (WELCOME_TEXT if text == "/start" else HELP_TEXT), main_menu()
+        if command == "/start":
+            return WELCOME_TEXT, main_menu("Выбери действие…")
+        return HELP_TEXT, main_menu("Выбери действие…")
 
     if text == "/status" or text == "🔧 Статус":
         set_chat_state(chat_id, "idle")
