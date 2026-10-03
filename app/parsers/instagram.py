@@ -710,6 +710,19 @@ def _find_event_time(text: str) -> str:
     if match:
         return match.group(1).strip()
 
+    # Common poster format: "September 19 20:30", "OCT 02 • 21:00".
+    date_time = re.search(
+        r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+        r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+        r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+"
+        r"\d{1,2}(?:st|nd|rd|th)?\s*(?:[•·|,\-–—]\s*)?("
+        + TIME_RE.pattern + r")",
+        text,
+        re.I,
+    )
+    if date_time:
+        return date_time.group(1).strip()
+
     return ""
 
 
