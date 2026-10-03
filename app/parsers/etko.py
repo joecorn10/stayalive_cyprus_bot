@@ -47,15 +47,16 @@ class EtkoParser(EventParser):
                     card = card.parent
             card_text = " ".join(card.get_text(" ", strip=True).split())
 
-            date_value, time_value = _extract_datetime(card_text)
-            if not date_value:
+            start_date, end_date, time_value = _extract_datetime(card_text)
+            if not start_date:
                 continue
 
             seen_urls.add(href)
             events.append({
                 "title": title[:200],
                 "description": card_text[:2000],
-                "date": date_value,
+                "date": start_date,
+                "end_date": end_date,
                 "time": time_value,
                 "venue": "ETKO",
                 "city": "Limassol",
@@ -69,31 +70,38 @@ class EtkoParser(EventParser):
         return events
 
 
-def _extract_datetime(text: str) -> tuple[str, str]:
+def _extract_datetime(text: str) -> tuple[str, str, str]:
     match = re.search(
         r"\b(\d{1,2})\.(\d{1,2})\s*(?:-|–|—)\s*(\d{1,2})\.(\d{1,2})\b",
         text,
     )
     if match:
         year = datetime.now().year
-        day, month = int(match.group(1)), int(match.group(2))
-        return f"{year:04d}-{month:02d}-{day:02d}", _extract_time(text)
+        start_day, start_month = int(match.group(1)), int(match.group(2))
+        end_day, end_month = int(match.group(3)), int(match.group(4))
+        start = f"{year:04d}-{start_month:02d}-{start_day:02d}"
+        end = f"{year:04d}-{end_month:02d}-{end_day:02d}"
+        return start, end, _extract_time(text)
 
     match = re.search(
         r"\b([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?"
-        r"(?:\s*(?:-|–|—)\s*[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?)?"
+        r"(?:\s*(?:-|–|—)\s*([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?)?"
         r"\s*(\d{4})?\b",
         text,
         re.IGNORECASE,
     )
     if match:
-        month = MONTHS.get(match.group(1).lower())
-        if month:
-            year = int(match.group(3)) if match.group(3) else datetime.now().year
-            day = int(match.group(2))
-            return f"{year:04d}-{month:02d}-{day:02d}", _extract_time(text)
+        start_month = MONTHS.get(match.group(1).lower())
+        if start_month:
+            start_day = int(match.group(2))
+            end_month = MONTHS.get((match.group(3) or match.group(1)).lower())
+            end_day = int(match.group(4) or start_day)
+            year = int(match.group(5)) if match.group(5) else datetime.now().year
+            start = f"{year:04d}-{start_month:02d}-{start_day:02d}"
+            end = f"{year:04d}-{end_month:02d}-{end_day:02d}"
+            return start, end, _extract_time(text)
 
-    return "", ""
+    return "", "", ""
 
 
 def _extract_time(text: str) -> str:
