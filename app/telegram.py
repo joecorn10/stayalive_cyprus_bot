@@ -240,14 +240,29 @@ def poll_once(token: str) -> bool:
                                         parse_mode=None,
                                     )
                         else:
-                            # Do not run the full catalogue sync inside the Telegram worker.
-                            # Some Instagram/Facebook sources can take minutes or hang on an
-                            # upstream request, which used to make the bot appear frozen after
-                            # the user tapped Today/Week. The catalogue is refreshed by the
-                            # scheduled sync workflow; newly added sources are synced immediately
-                            # below with the targeted parser.
+                            # Event views get an immediate acknowledgement before any
+                            # source refresh. This is important because a slow upstream source
+                            # must never make Telegram look completely dead.
                             needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
                             progress_message_id = None
+
+                            if needs_sync:
+                                try:
+                                    progress_message_id = send_message(
+                                        token,
+                                        chat_id,
+                                        "🔎 Обновляю события…\n\nПроверяю свежие данные и сразу покажу результат.",
+                                        parse_mode=None,
+                                    )
+                                    print(
+                                        f"Telegram progress sent: chat_id={chat_id} "
+                                        f"message_id={progress_message_id}"
+                                    )
+                                except Exception as progress_exc:
+                                    print(
+                                        f"Telegram progress message failed: {progress_exc}",
+                                        file=sys.stderr,
+                                    )
 
                             awaiting_source = get_chat_state(chat_id) == "awaiting_source"
                             source_url = normalize_url(text) if awaiting_source else ""
@@ -292,6 +307,10 @@ def poll_once(token: str) -> bool:
                                         keyboard,
                                         parse_mode=None,
                                     )
+                                    print(
+                                        f"Telegram progress updated: chat_id={chat_id} "
+                                        f"message_id={progress_message_id}"
+                                    )
                                 except Exception as exc:
                                     print(
                                         f"Telegram edit failed, sending result separately: {exc}",
@@ -311,7 +330,11 @@ def poll_once(token: str) -> bool:
                                             file=sys.stderr,
                                         )
                             else:
-                                send_message(token, chat_id, reply_text, keyboard)
+                                sent_id = send_message(token, chat_id, reply_text, keyboard)
+                                print(
+                                    f"Telegram response sent: chat_id={chat_id} "
+                                    f"message_id={sent_id}"
+                                )
 
         except Exception as exc:
             print(
