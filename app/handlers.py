@@ -265,6 +265,7 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         period, slug = parts[1], parts[2]
         category_map = {
             "music": "🎵 Музыка",
+            "comedy": "🎭 Comedy",
             "food": "🍷 Еда и вино",
             "art": "🎨 Искусство",
             "nightlife": "🪩 Nightlife",
