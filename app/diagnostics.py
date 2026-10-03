@@ -82,3 +82,6 @@ report["html_matches"]["around_russian"] = raw_text.splitlines()[max(0, len(raw_
 Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
 
 # trigger after parser fix
+
+report["html_matches"]["raw_russian_html"] = resp.text[max(0, resp.text.find("Русский Стендап")-2500):resp.text.find("Русский Стендап")+1000]
+Path("data/stantar_diagnostic.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
