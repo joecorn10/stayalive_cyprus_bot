@@ -48,11 +48,40 @@ CATEGORY_ALIASES = {
     "события": "",
 }
 
+CATEGORY_LABELS = {
+    "🎵 Музыка",
+    "🍷 Еда и вино",
+    "🎨 Искусство",
+    "🪩 Nightlife",
+    "🎭 Театр и кино",
+    "🧑‍🏫 Воркшопы",
+    "🏃 Спорт и outdoor",
+    "🛍 Маркеты и шопинг",
+    "👨‍👩‍👧 Семья",
+    "🎪 Фестивали",
+    "✨ Другое",
+}
+
 def canonical_category(category: str) -> str:
     value = str(category or "").strip()
     if not value:
         return ""
-    return CATEGORY_ALIASES.get(value.casefold(), value)
+    if value in CATEGORY_LABELS:
+        return value
+
+    # Sources use slightly different labels (singular/plural, English/Russian,
+    # or a leading emoji). Normalize them to one UI category.
+    plain = re.sub(r"^[^A-Za-zА-Яа-яЁё]+", "", value).strip().casefold()
+    if plain in CATEGORY_ALIASES:
+        return CATEGORY_ALIASES[plain]
+
+    for alias, label in CATEGORY_ALIASES.items():
+        if plain.startswith(alias + " ") or plain.startswith(alias + "/"):
+            return label
+
+    if plain in {"event", "events", "событие", "события"}:
+        return ""
+    return value
 
 CATEGORY_RULES = (
     ("🎵 Музыка", re.compile(r"\b(concert|live|music|dj|djs|band|gig|singer|pianist|музык|концерт|диджей|ди-джей|группа|певец|джаз|techno|house)\b", re.I)),
