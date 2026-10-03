@@ -168,22 +168,19 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
 
 def _fetch_via_apify(profile_url: str) -> list[dict] | None:
-    """Fetch recent public Instagram posts through Apify's scraper."""
+    """Fetch recent public Instagram posts through Apify's official scraper."""
     token = os.getenv("APIFY_API_TOKEN", "").strip()
     username = urlparse(profile_url).path.strip("/").split("/")[0]
     if not token or not username:
         return None
 
     endpoint = (
-        "https://api.apify.com/v2/acts/"
-        "simple.actor~instagram-profile-posts/"
+        "https://api.apify.com/v2/actors/"
+        "apify~instagram-profile-scraper/"
         "run-sync-get-dataset-items"
     )
-    payload = {
-        "usernames": [username],
-        "outputFormat": "posts",
-        "includeVideoTab": True,
-    }
+    payload = {"usernames": [username]}
+
     try:
         response = requests.post(
             endpoint,
@@ -206,34 +203,60 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
         return None
 
     if not isinstance(items, list):
-        logger.warning("Apify Instagram scraper returned unexpected data for @%s", username)
+        logger.warning(
+            "Apify Instagram scraper returned unexpected data for @%s",
+            username,
+        )
         return None
 
     posts = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("error"):
+    for profile in items:
+        if not isinstance(profile, dict):
+            continue
+        if profile.get("error"):
+            logger.warning(
+                "Apify could not scrape @%s: %s",
+                username,
+                profile.get("errorDescription") or profile.get("error"),
+            )
             continue
 
-        caption = item.get("caption") or item.get("text") or ""
-        post_url = (
-            item.get("url")
-            or item.get("postUrl")
-            or item.get("permalink")
-            or item.get("post_url")
-            or profile_url
-        )
-        date_value = (
-            item.get("timestamp")
-            or item.get("takenAt")
-            or item.get("takenAtTimestamp")
-            or item.get("publishedAt")
-            or item.get("date")
-        )
-        posts.append({
-            "url": str(post_url),
-            "caption": str(caption),
-            "date": date_value,
-        })
+        raw_posts = profile.get("latestPosts") or []
+        if isinstance(raw_posts, dict):
+            raw_posts = [raw_posts]
+
+        for item in raw_posts:
+            if not isinstance(item, dict):
+                continue
+
+            caption = (
+                item.get("caption")
+                or item.get("text")
+                or item.get("description")
+                or ""
+            )
+            post_url = (
+                item.get("url")
+                or item.get("postUrl")
+                or item.get("permalink")
+                or item.get("shortCode")
+                or profile_url
+            )
+            if isinstance(post_url, str) and post_url.startswith("http") is False:
+                post_url = f"https://www.instagram.com/p/{post_url}/"
+
+            date_value = (
+                item.get("timestamp")
+                or item.get("takenAtTimestamp")
+                or item.get("takenAt")
+                or item.get("publishedAt")
+                or item.get("date")
+            )
+            posts.append({
+                "url": str(post_url),
+                "caption": str(caption),
+                "date": date_value,
+            })
 
     logger.info(
         "Apify Instagram scraper extracted %s posts from @%s",
