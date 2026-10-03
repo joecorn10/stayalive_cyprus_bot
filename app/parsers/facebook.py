@@ -36,6 +36,109 @@ MONTHS = {
 }
 
 
+
+class FacebookDiscoveryParser(FacebookParser):
+    """Discover public Facebook event URLs through search-engine indexing.
+
+    This is intentionally a discovery layer, not a scrape of Facebook's
+    personalized /events feed. Search engines may expose public event pages
+    even when Facebook itself serves a login/challenge page to automation.
+    """
+
+    SEARCH_URL = "https://www.google.com/search"
+
+    def __init__(self, query: str = "site:facebook.com/events Cyprus event"):
+        super().__init__("https://www.facebook.com/events")
+        self.query = query
+
+    def parse(self) -> list[dict]:
+        try:
+            response = requests.get(
+                self.SEARCH_URL,
+                params={"q": self.query, "num": 20, "hl": "en"},
+                timeout=20,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            logger.warning("Facebook discovery search failed: %s", exc)
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        candidates = []
+
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+            match = re.search(r"https?://(?:www\.)?facebook\.com/events/[^&?#\s]+", href)
+            if not match:
+                continue
+            event_url = match.group(0).rstrip("/")
+            title = " ".join(link.stripped_strings).strip()
+            if not title:
+                continue
+            candidates.append((event_url, title))
+
+        # Google can expose the same event several times.
+        unique = []
+        seen = set()
+        for url, title in candidates:
+            if url in seen:
+                continue
+            seen.add(url)
+            unique.append((url, title))
+
+        events = []
+        for event_url, search_title in unique[:20]:
+            event = self._parse_discovered_event(event_url, search_title)
+            if event:
+                events.append(event)
+
+        logger.info("Facebook discovery: %s candidate URLs, %s parsed events", len(unique), len(events))
+        return events
+
+    def _parse_discovered_event(self, event_url: str, search_title: str) -> dict | None:
+        # First try the public event page itself.
+        try:
+            html = self._get(event_url)
+            parsed = self._parse_html(html, event_url)
+            if parsed:
+                return parsed[0]
+        except requests.RequestException:
+            pass
+
+        # Search result titles often contain the event name, but without a
+        # date we cannot safely turn them into an event.
+        date = self._extract_date(search_title)
+        if not date:
+            return None
+
+        return {
+            "title": self._clean_discovery_title(search_title),
+            "description": search_title[:1500],
+            "date": date,
+            "end_date": "",
+            "time": self._extract_time(search_title),
+            "venue": "",
+            "city": self._infer_city(search_title),
+            "price": "",
+            "ticket_url": "",
+            "source_url": event_url,
+            "image_url": "",
+            "category": self._infer_category(search_title),
+        }
+
+    @staticmethod
+    def _clean_discovery_title(title: str) -> str:
+        title = re.sub(r"\s*\|\s*Facebook\s*$", "", title, flags=re.I)
+        title = re.sub(r"\s*-\s*Facebook\s*$", "", title, flags=re.I)
+        return title.strip()[:300]
+
 class FacebookParser(EventParser):
     """Parse events exposed on a public Facebook Page."""
 
