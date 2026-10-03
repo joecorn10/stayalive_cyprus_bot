@@ -13,6 +13,7 @@ from app.parsers.aggregator import AggregatorParser
 from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
 from app.parsers.soldout import SoldOutParser
 from app.parsers.telegram import TelegramParser
+from app.translator import translate_event
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ def _normalize(events: list[dict]) -> list[dict]:
     normalized = []
     for event in events:
         normalize_event_dates(event)
+        translate_event(event)
         raw = "|".join(
             str(event.get(key, "")).strip().lower()
             for key in ("title", "date", "end_date", "time", "venue", "city")
