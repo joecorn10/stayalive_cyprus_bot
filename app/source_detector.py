@@ -37,6 +37,17 @@ def normalize_url(value: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return ""
+
+    # Instagram profile links often contain tracking parameters such as
+    # ?stkn=.... They do not identify a different source, so keep only the
+    # canonical profile path. This also prevents duplicate source records.
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if host in {"instagram.com", "instagr.am"}:
+        path = parsed.path.rstrip("/")
+        if path:
+            return f"https://www.instagram.com{path}"
+        return "https://www.instagram.com"
+
     return url
 
 
