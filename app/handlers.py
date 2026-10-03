@@ -17,7 +17,7 @@ from app.database import (
     list_sources,
     set_chat_state,
 )
-from app.keyboards import main_menu
+from app.keyboards import back_keyboard, category_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
 from app.sync import sync_all
 
@@ -94,32 +94,33 @@ def format_events(
 ) -> tuple[str, dict | None]:
     if not events:
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎", None
+    counts = {}
+    for event in events:
+        category = event["category"] or "✨ Другое"
+        counts[category] = counts.get(category, 0) + 1
+    categories = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    period = "today" if display_date else "week"
+    return (
+        f"{title}\n\nВыбери направление — события раскроются отдельным списком 👇",
+        category_keyboard(categories, period),
+    )
 
-    lines = [title, ""]
+def format_category_events(category: str, events, period: str) -> tuple[str, dict | None]:
+    selected = [event for event in events if (event["category"] or "✨ Другое") == category]
+    if not selected:
+        return f"{category}\n\nПока событий в этом направлении нет.", back_keyboard(period)
+    lines = [f"{category} · {len(selected)}", ""]
     current_day = None
-
-    for event in events[:30]:
-        event_date = datetime.fromisoformat(event["date"]).date()
-        end_date = (
-            datetime.fromisoformat(event["end_date"]).date()
-            if event["end_date"]
-            else event_date
-        )
-
-        if display_date and _event_active_on(event, display_date):
-            day_key = display_date.isoformat()
-        else:
-            day_key = event["date"]
-
+    for event in selected[:30]:
+        event_day = datetime.fromisoformat(event["date"]).date()
+        day_key = event_day.isoformat()
         if day_key != current_day:
             if current_day is not None:
                 lines.append("")
-            lines.append(f"📅 {_date_label(day_key)}")
+            lines.append(f"📅 {_date_label(event['date'])}")
             lines.append("")
             current_day = day_key
-
-        lines.append(f"{_category_icon(event['category'])} {str(event['title'])}")
-
+        lines.append(f"• {str(event['title'])}")
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
@@ -131,25 +132,10 @@ def format_events(
             meta.append(f"💶 {str(event['price'])}")
         if meta:
             lines.append(" · ".join(meta))
-
         if event["end_date"] and event["end_date"] != event["date"]:
-            if display_date and event_date < display_date <= end_date:
-                lines.append(
-                    f"↳ началось {_date_label(event['date'])} · до сегодня"
-                )
-            else:
-                lines.append(f"↳ до {_date_label(event['end_date'])}")
-
-        sources = list_event_sources(event["id"])
-        if sources:
-            names = []
-            for source in sources:
-                if source["name"] not in names:
-                    names.append(source["name"])
-            lines.append("📚 " + " · ".join(names))
+            lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-
-    return "\n".join(lines).rstrip(), None
+    return "\n".join(lines).rstrip(), back_keyboard(period)
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
@@ -256,6 +242,24 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
     data = (callback.get("data") or "").strip()
     message = callback.get("message") or {}
     chat_id = (message.get("chat") or {}).get("id")
+    if data.startswith("categories:"):
+        period = data.split(":", 1)[1]
+        today = cyprus_today()
+        end = today if period == "today" else today + timedelta(days=6)
+        events = list_events(today.isoformat(), end.isoformat())
+        title = "📅 Сегодня" if period == "today" else "🗓 На этой неделе"
+        return chat_id, *format_events(title, events, display_date=today if period == "today" else None)
+
+    if data.startswith("category:"):
+        parts = data.split(":", 2)
+        if len(parts) != 3:
+            return chat_id, "Не удалось открыть направление.", None
+        period, category = parts[1], parts[2]
+        today = cyprus_today()
+        end = today if period == "today" else today + timedelta(days=6)
+        events = list_events(today.isoformat(), end.isoformat())
+        return chat_id, *format_category_events(category, events, period)
+
     if not data.startswith("event:"):
         return chat_id, "Неизвестное действие.", None
     try:
