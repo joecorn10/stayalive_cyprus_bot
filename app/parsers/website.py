@@ -153,7 +153,7 @@ class WebsiteParser(EventParser):
             if not date_match:
                 for previous_tag in card.find_all_previous():
                     previous_text = re.sub(
-                        r"\\s+", " ", previous_tag.get_text(" ", strip=True)
+                        r"\s+", " ", previous_tag.get_text(" ", strip=True)
                     ).strip()
                     previous_match = date_re.search(previous_text)
                     if previous_match:
