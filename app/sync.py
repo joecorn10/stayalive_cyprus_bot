@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.database import init_db, list_sources, upsert_events
 from app.parsers.cyproplan import CyproplanParser
+from app.parsers.comiccon import ComicConParser
 from app.parsers.etko import EtkoParser
 from app.parsers.facebook import FacebookParser
 from app.parsers.soldout import SoldOutParser
@@ -33,6 +34,8 @@ def _parse_source(source) -> list[dict]:
         return EtkoParser().parse()
     if name == "Cyproplan":
         return CyproplanParser().parse()
+    if name == "Cyprus Comic Con":
+        return ComicConParser().parse()
     if name == "SoldOut TicketBox":
         return SoldOutParser().parse()
     if source["type"] == "Facebook":
