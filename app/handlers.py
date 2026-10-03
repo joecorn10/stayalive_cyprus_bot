@@ -27,6 +27,13 @@ HELP_TEXT = (
     "Источники уже подключены, сейчас собираю первую ленту."
 )
 
+MONTH_NAMES = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+}
+WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+
 
 def cyprus_today() -> datetime.date:
     return datetime.now(ZoneInfo(TIMEZONE)).date()
@@ -40,17 +47,30 @@ def format_sources() -> str:
     lines = ["📚 Источники", ""]
     for source in sources:
         status = "🟢" if source["enabled"] else "⚪"
-        lines.append(f"{status} {source['name']} — {source['type']}")
-        details = []
-        if source["category"]:
-            details.append(source["category"])
-        if source["city"]:
-            details.append(source["city"])
-        if details:
-            lines.append(f"   {' · '.join(details)}")
+        lines.append(f"{status} {source['name']} · {source['type']}")
         if source["comment"]:
             lines.append(f"   {source['comment']}")
     return "\n".join(lines)
+
+
+def _date_label(value: str) -> str:
+    date = datetime.fromisoformat(value).date()
+    return f"{date.day} {MONTH_NAMES[date.month]}, {WEEKDAYS[date.weekday()]}"
+
+
+def _category_icon(category: str) -> str:
+    category = (category or "").lower()
+    if "музык" in category or "concert" in category:
+        return "🎵"
+    if "театр" in category:
+        return "🎭"
+    if "искус" in category or "art" in category:
+        return "🎨"
+    if "спорт" in category:
+        return "🏃"
+    if "фестив" in category:
+        return "🎪"
+    return "✨"
 
 
 def format_events(title: str, events) -> str:
@@ -58,25 +78,39 @@ def format_events(title: str, events) -> str:
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎"
 
     lines = [title, ""]
+    current_day = None
+
     for event in events[:30]:
-        lines.append(f"🎵 {event['title']}")
-        event_date = event["date"]
-        if event["end_date"] and event["end_date"] != event["date"]:
-            event_date = f"{event['date']} → {event['end_date']}"
-        details = [f"📅 {event_date}"]
+        day_key = event["date"]
+        if day_key != current_day:
+            if current_day is not None:
+                lines.append("")
+            lines.append(f"📅 {_date_label(day_key)}")
+            lines.append("")
+            current_day = day_key
+
+        lines.append(f"{_category_icon(event['category'])} {event['title']}")
+
+        meta = []
         if event["time"]:
-            details.append(f"🕘 {event['time']}")
+            meta.append(f"🕐 {event['time']}")
         if event["venue"]:
-            details.append(f"📍 {event['venue']}")
+            meta.append(f"📍 {event['venue']}")
         elif event["city"]:
-            details.append(f"📍 {event['city']}")
+            meta.append(f"📍 {event['city']}")
         if event["price"]:
-            details.append(f"💶 {event['price']}")
-        lines.append(" · ".join(details))
+            meta.append(f"💶 {event['price']}")
+        if meta:
+            lines.append(" · ".join(meta))
+
+        if event["end_date"] and event["end_date"] != event["date"]:
+            lines.append(f"↳ до {_date_label(event['end_date'])}")
+
         if event["ticket_url"]:
             lines.append(f"🔗 {event['ticket_url']}")
         lines.append("")
-    return "\n".join(lines).strip()
+
+    return "\n".join(lines).rstrip()
 
 
 def format_status() -> str:
@@ -89,8 +123,11 @@ def format_status() -> str:
         f"🔮 Будущие события: {stats['upcoming']}",
         f"🕐 Последний event seen: {stats['latest_event_seen']}",
         "",
-        "Источник:",
-        "🟢 ETKO — парсер подключён",
+        "Парсеры:",
+        "🟢 ETKO",
+        "🟢 Cyproplan",
+        "🟢 SoldOut TicketBox",
+        "🟢 Public Telegram",
     ]
     recent = list_recent_events(5)
     if recent:
