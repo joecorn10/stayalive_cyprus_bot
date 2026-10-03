@@ -105,8 +105,8 @@ class WebsiteParser(EventParser):
                 continue
 
             start_time, _, venue = pending
-            if ticket_index < len(ticket_links):
-                ticket_index += 1
+            ticket_url = ticket_links[ticket_index] if ticket_index < len(ticket_links) else ""
+            ticket_index += 1
             events.append({
                 "title": line[:200],
                 "description": "",
@@ -116,7 +116,7 @@ class WebsiteParser(EventParser):
                 "venue": venue[:200],
                 "city": "Limassol" if "limassol" in text.lower() else "",
                 "price": "",
-                "ticket_url": ticket_links[ticket_index] if ticket_index < len(ticket_links) else "",
+                "ticket_url": ticket_url,
                 "source_url": self.url,
                 "image_url": "",
                 "category": "События",
