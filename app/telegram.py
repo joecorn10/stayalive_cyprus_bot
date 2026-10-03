@@ -240,20 +240,14 @@ def poll_once(token: str) -> bool:
                                         parse_mode=None,
                                     )
                         else:
+                            # Do not run the full catalogue sync inside the Telegram worker.
+                            # Some Instagram/Facebook sources can take minutes or hang on an
+                            # upstream request, which used to make the bot appear frozen after
+                            # the user tapped Today/Week. The catalogue is refreshed by the
+                            # scheduled sync workflow; newly added sources are synced immediately
+                            # below with the targeted parser.
                             needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
-                            if needs_sync:
-                                progress_message_id = send_message(
-                                    token,
-                                    chat_id,
-                                    "🔎 Ищу свежие события…\n\n"
-                                    "Проверяю источники, это займёт несколько секунд.",
-                                    parse_mode=None,
-                                )
-                                try:
-                                    synced = sync_all()
-                                    print(f"Telegram on-demand sync: {synced} new events")
-                                except Exception as sync_exc:
-                                    print(f"Telegram on-demand sync failed: {sync_exc}", file=sys.stderr)
+                            progress_message_id = None
 
                             awaiting_source = get_chat_state(chat_id) == "awaiting_source"
                             source_url = normalize_url(text) if awaiting_source else ""
