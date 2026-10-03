@@ -140,7 +140,7 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-    return "\n".join(lines).rstrip(), back_keyboard(period)
+    return "\n".join(lines).rstrip(), event_keyboard(selected[:30], period, category)
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
