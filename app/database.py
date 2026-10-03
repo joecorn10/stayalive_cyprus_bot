@@ -141,7 +141,7 @@ def upsert_events(events: list[dict]) -> int:
                        ticket_url = ?, image_url = ?, content_hash = ?,
                        last_seen_at = CURRENT_TIMESTAMP
                        WHERE id = ?""",
-                    values[:-1] + (values[-1], existing["id"]),
+                    values[:10] + (values[11], values[12], existing["id"]),
                 )
             else:
                 cursor = conn.execute(
