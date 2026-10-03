@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: stayalive-cyprus-bot
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   bot:
