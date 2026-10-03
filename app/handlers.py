@@ -19,7 +19,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, main_menu
 from app.source_detector import detect_source, normalize_url
-from app.sync import sync_all
+from app.sync import canonical_category, sync_all
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -106,7 +106,7 @@ def format_events(
     )
 
 def format_category_events(category: str, events, period: str) -> tuple[str, dict | None]:
-    selected = [event for event in events if (event["category"] or "✨ Другое") == category]
+    selected = [event for event in events if (canonical_category(event["category"]) or "✨ Другое") == category]
     if not selected:
         return f"{category}\n\nПока событий в этом направлении нет.", back_keyboard(period)
     lines = [f"{category} · {len(selected)}", ""]
