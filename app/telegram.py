@@ -4,6 +4,8 @@ from pathlib import Path
 import requests
 import sys
 from app.handlers import handle_callback, handle_message
+from app.database import get_source_by_url, update_source_comment
+from app.sync import sync_pinned_telegram_chat
 
 API_TIMEOUT = 35
 STATE_PATH = Path("data/telegram_offset.json")
@@ -120,6 +122,38 @@ def poll_once(token: str) -> bool:
             continue
 
         text = (message.get("text") or "").strip()
+        if text.split("@", 1)[0] == "/pins" and (message.get("chat") or {}).get("type") in ("group", "supergroup"):
+            source_url = "https://t.me/+0C0Mu-Xz4HAxMGNi"
+            source = get_source_by_url(source_url)
+            if not source:
+                send_message(token, chat_id, "Источник закрепов не найден в базе.", parse_mode=None)
+                continue
+
+            comment = source["comment"] or ""
+            import re
+            if re.search(r"chat_id=-?\\d+", comment):
+                comment = re.sub(r"chat_id=-?\\d+", f"chat_id={chat_id}", comment)
+            else:
+                comment = f"{comment}; chat_id={chat_id}"
+            update_source_comment(source_url, comment)
+
+            try:
+                added = sync_pinned_telegram_chat(token, chat_id, source_url)
+                send_message(
+                    token,
+                    chat_id,
+                    f"📌 Закреп проверен. Новых событий: {added}.\\n\\nТеперь этот чат можно обновлять автоматически.",
+                    parse_mode=None,
+                )
+            except Exception as exc:
+                send_message(
+                    token,
+                    chat_id,
+                    f"❌ Не удалось прочитать закреп: {exc}",
+                    parse_mode=None,
+                )
+            continue
+
         needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
 
         progress_message_id = None
