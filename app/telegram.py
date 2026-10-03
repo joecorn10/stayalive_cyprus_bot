@@ -83,28 +83,38 @@ def save_offset(offset: int) -> None:
     STATE_PATH.write_text(json.dumps({"offset": offset}, indent=2) + "\n", encoding="utf-8")
 
 
-def configure_telegram_menu(token: str) -> None:
-    """Configure Telegram's visible command menu for an empty/new chat."""
+def configure_telegram_profile(token: str) -> None:
+    """Configure the welcome description shown before the first Start."""
     api_call(
         token,
-        "setMyCommands",
+        "setMyDescription",
         {
-            "commands": [
-                {"command": "start", "description": "Открыть Stay Alive Cyprus"},
-                {"command": "today", "description": "События сегодня"},
-                {"command": "week", "description": "События на этой неделе"},
-                {"command": "sources", "description": "Источники"},
-                {"command": "add", "description": "Добавить источник"},
-                {"command": "status", "description": "Статус бота"},
-            ]
+            "description": (
+                "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
+                "События на Кипре: концерты, выставки, вечеринки, "
+                "дегустации, маркеты и другие причины выйти из дома.\n\n"
+                "Нажми Start, чтобы открыть бота."
+            )
         },
     )
     api_call(
         token,
-        "setChatMenuButton",
-        {"menu_button": {"type": "commands"}},
+        "setMyShortDescription",
+        {
+            "short_description": (
+                "События на Кипре: концерты, искусство, "
+                "вечеринки, еда и другие планы."
+            )
+        },
     )
-    print("Telegram menu configured.")
+    # Keep Telegram's native command menu hidden: the persistent reply
+    # keyboard is the bot's primary navigation.
+    api_call(
+        token,
+        "setChatMenuButton",
+        {"menu_button": {"type": "default"}},
+    )
+    print("Telegram profile configured; command menu hidden.")
 
 
 def telegram_diagnostics(token: str) -> None:
