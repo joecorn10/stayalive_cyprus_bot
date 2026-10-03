@@ -85,6 +85,7 @@ def init_db() -> None:
             ("Cyprus Man Chat", "https://t.me/cyprus_man_chat", "Telegram", "Cyprus community and events"),
             ("Cyprus Events Group", "https://t.me/+xiXW5YRRXRg1Y2My", "Telegram", "Cyprus events group"),
             ("ETKO Limassol", "https://instagram.com/etko_limassol", "Instagram", "Events, concerts and electronic music"),
+            ("Facebook Cyprus Discovery", "site:facebook.com/events Cyprus (Limassol OR Nicosia OR Larnaca OR Paphos) event", "FacebookDiscovery", "Public Facebook events discovered through search indexing"),
         ]
         conn.executemany(
             """INSERT OR IGNORE INTO sources
