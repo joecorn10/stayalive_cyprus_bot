@@ -150,15 +150,15 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
     final_path = urlparse(response.url).path.lower()
     if response.status_code != 200:
         logger.warning(
-            "Instagram profile returned HTTP %s for %s; trying Reader fallback",
+            "Instagram profile returned HTTP %s for %s; trying internal API fallback",
             response.status_code,
             profile_url,
         )
-        return _fetch_via_reader(profile_url)
+        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
 
     if "/accounts/login" in final_path:
         logger.warning(
-            "Instagram profile is behind a login wall for %s; trying Reader fallback",
+            "Instagram profile is behind a login wall for %s; trying internal API fallback",
             profile_url,
         )
         return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
