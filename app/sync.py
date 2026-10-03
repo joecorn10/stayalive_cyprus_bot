@@ -26,6 +26,19 @@ def _normalize(events: list[dict]) -> list[dict]:
     return normalized
 
 
+def _parse_source(source) -> list[dict]:
+    name = source["name"]
+    if name == "ETKO Cyprus":
+        return EtkoParser().parse()
+    if name == "Cyproplan":
+        return CyproplanParser().parse()
+    if name == "SoldOut TicketBox":
+        return SoldOutParser().parse()
+    if source["type"] == "Telegram":
+        return TelegramParser(source["url"]).parse()
+    return []
+
+
 def sync_etko() -> int:
     return upsert_events(_normalize(EtkoParser().parse()))
 
@@ -42,38 +55,33 @@ def sync_telegram_source(url: str) -> int:
     return upsert_events(_normalize(TelegramParser(url).parse()))
 
 
-def _run_source(source) -> tuple[str, int]:
-    name = source["name"]
-    try:
-        if name == "ETKO Cyprus":
-            added = sync_etko()
-        elif name == "Cyproplan":
-            added = sync_cyproplan()
-        elif name == "SoldOut TicketBox":
-            added = sync_soldout()
-        elif source["type"] == "Telegram":
-            added = sync_telegram_source(source["url"])
-        else:
-            return name, 0
-        return name, added
-    except Exception:
-        logger.exception("%s sync failed", name)
-        return name, 0
-
-
 def sync_all() -> int:
-    """Sync enabled sources concurrently so one slow source does not block all others."""
+    """Fetch sources concurrently, then write results to SQLite sequentially."""
     init_db()
     sources = [source for source in list_sources() if source["enabled"]]
-    total = 0
+    parsed: list[tuple[str, list[dict]]] = []
 
-    # Parsers do network I/O. Run them concurrently, but each parser still
-    # performs its own short SQLite transaction when it has results.
+    # Network I/O happens in parallel. SQLite writes happen afterwards in one
+    # thread, avoiding "database is locked" races between parser workers.
     with ThreadPoolExecutor(max_workers=min(6, max(1, len(sources)))) as executor:
-        futures = [executor.submit(_run_source, source) for source in sources]
+        futures = {
+            executor.submit(_parse_source, source): source["name"]
+            for source in sources
+        }
         for future in as_completed(futures):
-            name, added = future.result()
+            name = futures[future]
+            try:
+                parsed.append((name, _normalize(future.result())))
+            except Exception:
+                logger.exception("%s sync failed", name)
+
+    total = 0
+    for name, events in parsed:
+        try:
+            added = upsert_events(events)
             total += added
             logger.info("%s sync: %s new events", name, added)
+        except Exception:
+            logger.exception("%s database update failed", name)
 
     return total
