@@ -97,7 +97,11 @@ class AggregatorParser(EventParser):
             self.source_name,
             len(links),
             len(unique),
-        )\n        print(\n            f"{self.source_name} discovery: {len(links)} event links, {len(unique)} parsed events",\n            flush=True,\n        )
+        )
+        print(
+            f"{self.source_name} discovery: {len(links)} event links, {len(unique)} parsed events",
+            flush=True,
+        )
         return unique
 
 
