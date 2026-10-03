@@ -25,6 +25,9 @@ class WebsiteParser(EventParser):
             stantar_events = self._stantar_cards(soup)
             if stantar_events:
                 return stantar_events
+            stantar_events = self._stantar_html_cards(response.text)
+            if stantar_events:
+                return stantar_events
         events = []
         seen = set()
 
@@ -53,6 +56,60 @@ class WebsiteParser(EventParser):
         # generic date/time/venue line parser.
         if not events:
             events = self._html_schedule_events(soup)
+        return events
+
+    def _stantar_html_cards(self, html: str) -> list[dict]:
+        """Regex fallback for Stantar's server-rendered React card markup."""
+        year_match = re.search(r"\b(20\d{2})\b", html)
+        year = int(year_match.group(1)) if year_match else datetime.now().year
+        card_re = re.compile(
+            r'<li[^>]*class="[^"]*individualCard[^"]*"[^>]*>'
+            r'.*?<p[^>]*class="[^"]*showMeta[^"]*"[^>]*>(.*?)</p>'
+            r'.*?<h3[^>]*>\s*<a[^>]*>(.*?)</a>\s*</h3>'
+            r'.*?<p[^>]*class="[^"]*showLanguage[^"]*"[^>]*>.*?</p>'
+            r'.*?<a[^>]*class="[^"]*buySingle[^"]*"[^>]*href="([^"]+)"[^>]*'
+            r'(?:aria-label="([^"]*)")?',
+            re.I | re.S,
+        )
+        date_re = re.compile(
+            r"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\d{1,2})\s+"
+            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
+            re.I,
+        )
+        months = {
+            "jan":"January","feb":"February","mar":"March","apr":"April",
+            "may":"May","jun":"June","jul":"July","aug":"August",
+            "sep":"September","oct":"October","nov":"November","dec":"December",
+        }
+        meta_re = re.compile(r"(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\s*[·•]\s*([^<]+)")
+        events = []
+        for match in card_re.finditer(html):
+            meta_html, title_html, href, aria = match.groups()
+            meta = BeautifulSoup(meta_html, "html.parser").get_text(" ", strip=True)
+            title = BeautifulSoup(title_html, "html.parser").get_text(" ", strip=True)
+            meta_match = meta_re.search(meta)
+            date_match = date_re.search(aria or "")
+            if not meta_match or not date_match:
+                continue
+            date_text = f"{date_match.group(1)} {months[date_match.group(2).lower()]} {year}"
+            parsed = parse_event_dates(date_text, default_year=year)
+            if not parsed:
+                continue
+            start_time, _, venue = meta_match.groups()
+            events.append({
+                "title": title[:200],
+                "description": "",
+                "date": parsed[0],
+                "end_date": parsed[0],
+                "time": start_time,
+                "venue": venue.strip()[:200],
+                "city": "Limassol",
+                "price": "",
+                "ticket_url": urljoin(self.url, href),
+                "source_url": self.url,
+                "image_url": "",
+                "category": _website_category(title),
+            })
         return events
 
     def _stantar_cards(self, soup: BeautifulSoup) -> list[dict]:
