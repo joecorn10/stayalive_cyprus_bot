@@ -40,6 +40,8 @@ def send_message(
         payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
+    # Keep inline links clickable, but never generate webpage previews.
+    payload["link_preview_options"] = {"is_disabled": True}
     result = api_call(token, "sendMessage", payload)
     return (result.get("result") or {}).get("message_id")
 
@@ -57,6 +59,8 @@ def edit_message(
         payload["parse_mode"] = parse_mode
     if reply_markup:
         payload["reply_markup"] = reply_markup
+    # Keep inline links clickable, but never generate webpage previews.
+    payload["link_preview_options"] = {"is_disabled": True}
     api_call(token, "editMessageText", payload)
 
 
@@ -128,20 +132,35 @@ def poll_once(token: str) -> bool:
                 )
                 if chat_id is not None:
                     if message_id is not None:
-                        # Replace the old callback message instead of editing it.
-                        # This avoids retaining stale Telegram link previews.
                         try:
-                            delete_message(token, chat_id, message_id)
+                            edit_message(
+                                token,
+                                chat_id,
+                                message_id,
+                                reply_text,
+                                keyboard,
+                            )
                             print(
-                                "Telegram callback: deleted source message: "
+                                "Telegram callback handled by editing message: "
                                 f"chat_id={chat_id} message_id={message_id}"
                             )
-                        except Exception as delete_exc:
+                        except Exception as edit_exc:
                             print(
-                                f"Telegram callback source-message delete failed: {delete_exc}",
+                                f"Telegram callback edit failed: {edit_exc}",
                                 file=sys.stderr,
                             )
-                    send_message(token, chat_id, reply_text, keyboard)
+                            # If Telegram rejects an edit for an old message,
+                            # fall back to a clean replacement.
+                            try:
+                                delete_message(token, chat_id, message_id)
+                            except Exception as delete_exc:
+                                print(
+                                    f"Telegram callback stale-message delete failed: {delete_exc}",
+                                    file=sys.stderr,
+                                )
+                            send_message(token, chat_id, reply_text, keyboard)
+                    else:
+                        send_message(token, chat_id, reply_text, keyboard)
             except Exception as exc:
                 print(
                     f"Telegram callback failed for data={data!r}: {exc}",
