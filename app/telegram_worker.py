@@ -8,7 +8,7 @@ from app.telegram import poll_once
 
 # Finish before the next scheduled GitHub Actions run starts. This keeps the
 # git-backed Telegram offset single-writer and avoids overlapping workers.
-WORKER_SECONDS = 105
+WORKER_SECONDS = 285
 SLEEP_SECONDS = 1
 
 

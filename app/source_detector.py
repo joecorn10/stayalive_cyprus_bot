@@ -99,6 +99,7 @@ def detect_name(url: str, source_type: str) -> str:
         "etkocyprus.com": "ETKO Cyprus",
         "cyproplan.com": "Cyproplan",
         "soldoutticketbox.com": "SoldOut TicketBox",
+        "stantarkkomety.com": "Stantar Kkomety",
     }
     if host in known:
         return known[host]

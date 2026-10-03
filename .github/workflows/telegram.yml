@@ -9,7 +9,7 @@ on:
       - "data/telegram_offset.json"
       - "events.db"
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "3/5 * * * *"
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ concurrency:
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4

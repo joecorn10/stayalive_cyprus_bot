@@ -105,6 +105,7 @@ def init_db() -> None:
             ("ETKO Limassol", "https://instagram.com/etko_limassol", "Instagram", "Events, concerts and electronic music"),
             ("Urban Sketchers Cyprus", "https://www.instagram.com/urbansketcherscyprus", "Instagram", "Urban sketching, sketch walks and drawing meetups in Cyprus"),
             ("artUS Cyprus", "https://artuscy.com/", "Website", "Art events, exhibitions and creative workshops"),
+            ("Stantar Kkomety", "https://stantarkkomety.com/festival/tickets", "Website", "Limassol Comedy Festival tickets and programme"),
             ("Facebook Cyprus Discovery", "site:facebook.com/events Cyprus (Limassol OR Nicosia OR Larnaca OR Paphos) event", "FacebookDiscovery", "Public Facebook events discovered through search indexing"),
         ]
         conn.executemany(
