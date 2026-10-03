@@ -120,7 +120,12 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             lines.append(f"📅 {_date_label(event['date'])}")
             lines.append("")
             current_day = day_key
-        lines.append(f"• {str(event['title'])}")
+        title = escape(str(event["title"]))
+        source_url = str(event["source_url"] or "").strip()
+        if source_url:
+            lines.append(f'• <a href="{escape(source_url, quote=True)}">{title}</a>')
+        else:
+            lines.append(f"• {title}")
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
@@ -135,7 +140,7 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-    return "\n".join(lines).rstrip(), event_keyboard(selected[:30], period, category)
+    return "\n".join(lines).rstrip(), back_keyboard(period)
 
 
 def format_event_details(event) -> tuple[str, dict | None]:
