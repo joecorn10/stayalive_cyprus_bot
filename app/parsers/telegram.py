@@ -116,7 +116,10 @@ def _parse_cyproplan(soup: BeautifulSoup, source_url: str) -> list[dict]:
 
             # First try title + date on the same line.
             title = _clean_title(line)
-            event_url = _cyproplan_title_and_url(body, line)
+            inline_title, inline_url = _cyproplan_title_and_url(body, line)
+            if len(inline_title) > len(title):
+                title = inline_title
+            event_url = inline_url
 
             # If the date is on a standalone line, use the nearest preceding
             # meaningful line as the title. This is common in Cyproplan digests.
