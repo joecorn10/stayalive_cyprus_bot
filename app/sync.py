@@ -1,6 +1,7 @@
 """Event synchronization jobs."""
 
 import hashlib
+import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -14,6 +15,7 @@ from app.parsers.facebook import FacebookParser, FacebookDiscoveryParser
 from app.parsers.instagram import InstagramParser
 from app.parsers.soldout import SoldOutParser
 from app.parsers.telegram import TelegramParser
+from app.parsers.telegram_pinned import TelegramPinnedParser
 from app.translator import translate_event
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,17 @@ def _parse_source(source) -> list[dict]:
         return FacebookDiscoveryParser(source["url"]).parse()
     if source["type"] == "Facebook":
         return FacebookParser(source["url"]).parse()
+    if source["type"] == "TelegramPinned":
+        match = re.search(r"chat_id=(-?\\d+)", source["comment"] or "")
+        if not match:
+            logger.info("%s: chat_id not registered yet", name)
+            return []
+        from app.config import TELEGRAM_BOT_TOKEN
+        return TelegramPinnedParser(
+            TELEGRAM_BOT_TOKEN,
+            int(match.group(1)),
+            source["url"],
+        ).parse()
     if source["type"] == "Telegram":
         return TelegramParser(source["url"]).parse()
     if source["type"] == "Instagram":
