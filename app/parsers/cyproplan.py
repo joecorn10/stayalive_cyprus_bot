@@ -7,6 +7,7 @@ detail page.
 """
 
 import json
+import logging
 import re
 from datetime import datetime
 from urllib.parse import urljoin
@@ -15,6 +16,8 @@ import requests
 from bs4 import BeautifulSoup
 
 from app.parsers.base import EventParser
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://cyproplan.com/"
 DISCOVERY_URLS = (
@@ -62,9 +65,11 @@ class CyproplanParser(EventParser):
         for event_url in event_urls:
             try:
                 event = _parse_event_page(session, event_url)
-            except requests.RequestException:
+            except requests.RequestException as exc:
+                logger.warning("Cyproplan event request failed: %s: %s", event_url, exc)
                 continue
             except Exception:
+                logger.exception("Cyproplan event parse failed: %s", event_url)
                 continue
             if event:
                 events.append(event)
@@ -157,6 +162,8 @@ def _json_ld(soup: BeautifulSoup) -> dict:
             if isinstance(nested, dict):
                 return nested
     return {}
+
+
 def _meta(soup: BeautifulSoup, name: str) -> str:
     node = soup.find("meta", attrs={"property": name}) or soup.find(
         "meta", attrs={"name": name}
