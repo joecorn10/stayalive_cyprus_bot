@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   bot:
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore: persist bot state')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
