@@ -52,12 +52,122 @@ class WebsiteParser(EventParser):
                     if key not in seen:
                         seen.add(key)
                         events.append(event)
+        # Cyprus.BZ event pages expose reliable event metadata in their visible
+        # HTML even when JSON-LD is missing. This fallback recovers those pages
+        # (including category, venue, price and overnight end dates).
+        if not events and "cyprus.bz/event/" in self.url:
+            event = self._cyprus_bz_event_page(soup)
+            if event:
+                return [event]
+
         # Some modern event sites render their programme as semantic HTML instead
         # of JSON-LD. Fall back to a structured card parser first, then the
         # generic date/time/venue line parser.
         if not events:
             events = self._html_schedule_events(soup)
         return events
+
+    def _cyprus_bz_event_page(self, soup: BeautifulSoup) -> dict | None:
+        """Parse Cyprus.BZ event pages that do not expose JSON-LD Event data."""
+        text = re.sub(r"\\s+", " ", soup.get_text(" ", strip=True)).strip()
+        title_node = soup.find("h1")
+        title = re.sub(r"\\s+", " ", title_node.get_text(" ", strip=True)).strip() if title_node else ""
+        if not title:
+            return None
+
+        dates_match = re.search(
+            r"Dates\\s+.*?(?P<date>\\d{1,2}\\s+[A-Za-z]{3}\\s+20\\d{2})"
+            r"(?:\\s+(?P<start>\\d{1,2}:\\d{2})\\s*[AP]M)?"
+            r"(?:\\s*-\\s*(?P<end>\\d{1,2}:\\d{2})\\s*[AP]M)?",
+            text,
+            re.I,
+        )
+        if not dates_match:
+            return None
+
+        date_value = dates_match.group("date")
+        dates = parse_event_dates(date_value, default_year=datetime.now().year)
+        if not dates:
+            return None
+        start_time = dates_match.group("start") or ""
+        end_time = dates_match.group("end") or ""
+        start_date = dates[0]
+
+        end_date = start_date
+        if start_time and end_time:
+            try:
+                from datetime import datetime as dt, timedelta
+                start_clock = dt.strptime(start_time, "%I:%M %p")
+                end_clock = dt.strptime(end_time, "%I:%M %p")
+                if end_clock.time() < start_clock.time():
+                    end_date = (dt.fromisoformat(start_date) + timedelta(days=1)).date().isoformat()
+            except ValueError:
+                pass
+
+        venue = ""
+        venue_match = re.search(r"Venue\\s+(.+?)\\s+Tickets", text, re.I)
+        if venue_match:
+            venue = venue_match.group(1).strip(" ·|")
+
+        price = ""
+        ticket_match = re.search(
+            r"Tickets\\s+(?:From\\s+)?(€\\s?\\d+(?:[.,]\\d+)?)",
+            text,
+            re.I,
+        )
+        if ticket_match:
+            price = ticket_match.group(1).replace(" ", "")
+
+        notes = ""
+        notes_match = re.search(r"Notes\\s+(.+?)(?:\\s+About This Event|\\s+Date & Time|$)", text, re.I)
+        if notes_match:
+            notes = notes_match.group(1)
+
+        category = _website_category(title)
+        category_map = (
+            ("Nightlife", "🪩 Nightlife"),
+            ("Music", "🎵 Музыка"),
+            ("Festivals", "🎪 Фестивали"),
+            ("Theatre", "🎭 Театр и кино"),
+            ("Theater", "🎭 Театр и кино"),
+            ("Culture", "🎨 Искусство"),
+            ("Art", "🎨 Искусство"),
+            ("Food", "🍷 Еда и вино"),
+            ("Workshops", "🧑‍🏫 Воркшопы"),
+            ("Sports", "🏃 Спорт и outdoor"),
+            ("Outdoor", "🏃 Спорт и outdoor"),
+            ("Kids", "👨‍👩‍👧 Семья"),
+            ("Community", "✨ Другое"),
+        )
+        for marker, label in category_map:
+            if re.search(rf"\\b{re.escape(marker)}\\b", notes, re.I):
+                category = label
+                break
+
+        city = ""
+        city_match = re.search(r",\\s*(Nicosia|Limassol|Larnaca|Paphos|Famagusta|Kyrenia|Ayia Napa|Paralimni|Troodos|Polis)\\b", venue, re.I)
+        if city_match:
+            city = city_match.group(1)
+
+        description = ""
+        about_match = re.search(r"About This Event\\s+(.+?)(?:\\s+Date & Time|\\s+Location|\\s+About the Artists|\\s+Organizer|$)", text, re.I)
+        if about_match:
+            description = about_match.group(1).strip()[:4000]
+
+        return {
+            "title": title[:200],
+            "description": description,
+            "date": start_date,
+            "end_date": end_date,
+            "time": start_time,
+            "venue": venue[:200],
+            "city": city[:100],
+            "price": price,
+            "ticket_url": self.url,
+            "source_url": self.url,
+            "image_url": "",
+            "category": category,
+        }
 
     def _stantar_html_cards(self, html: str) -> list[dict]:
         """Regex fallback for Stantar's server-rendered React card markup."""
