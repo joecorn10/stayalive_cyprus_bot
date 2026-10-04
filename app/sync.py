@@ -112,6 +112,10 @@ def classify_event(event: dict) -> str:
     source_url = str(event.get("source_url", "") or "").lower()
     if "stantarkkomety.com" in source_url:
         return "🎭 Comedy"
+    # Cyprus Underground is a dedicated electronic-music / club-event calendar.
+    # Keep its listings in Nightlife even when the title contains generic music terms.
+    if "cyprusunderground.com.cy" in source_url:
+        return "🪩 Nightlife"
 
     text = " ".join(str(event.get(key, "")) for key in ("title", "description", "venue", "city"))
 
