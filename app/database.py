@@ -536,7 +536,7 @@ def deduplicate_events() -> int:
             if match and match["id"] != current["id"]:
                 keeper, duplicate = (
                     (current, match)
-                    if _event_semantic_score(current) >= _event_semantic_score(match)
+                    if _event_semantic_score(dict(current)) >= _event_semantic_score(dict(match))
                     else (match, current)
                 )
                 _merge_event_rows(conn, keeper, duplicate)
