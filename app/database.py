@@ -90,6 +90,8 @@ def init_db() -> None:
             conn.execute("UPDATE events SET end_date = date WHERE end_date IS NULL")
         if "identity_key" not in columns:
             conn.execute("ALTER TABLE events ADD COLUMN identity_key TEXT")
+        if "categories" not in columns:
+            conn.execute("ALTER TABLE events ADD COLUMN categories TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_state (
@@ -698,6 +700,7 @@ def upsert_events(events: list[dict]) -> int:
                 event.get("title", ""),
                 event.get("description", ""),
                 event.get("category", ""),
+                event.get("categories", ""),
                 event.get("date", ""),
                 event.get("end_date") or event.get("date", ""),
                 event.get("time", ""),
@@ -714,7 +717,7 @@ def upsert_events(events: list[dict]) -> int:
             if match:
                 conn.execute(
                     """UPDATE events SET
-                       title = ?, description = ?, category = ?, date = ?,
+                       title = ?, description = ?, category = ?, categories = ?, date = ?,
                        end_date = ?, time = ?, venue = ?, city = ?, price = ?,
                        ticket_url = ?, source_url = ?, image_url = ?, content_hash = ?,
                        identity_key = ?, last_seen_at = CURRENT_TIMESTAMP
@@ -725,9 +728,9 @@ def upsert_events(events: list[dict]) -> int:
             else:
                 cursor = conn.execute(
                     """INSERT INTO events
-                       (title, description, category, date, end_date, time, venue, city,
+                       (title, description, category, categories, date, end_date, time, venue, city,
                         price, ticket_url, source_url, image_url, content_hash, identity_key)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     values,
                 )
                 event_id = cursor.lastrowid
