@@ -532,6 +532,9 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
 
 def _merge_event_categories(*events) -> tuple[str, str]:
     """Merge categories from every source instead of letting the last source win."""
+    # Import lazily to avoid a module-level database -> sync cycle.
+    from app.sync import canonical_category
+
     values = []
     for event in events:
         if not event:
@@ -729,6 +732,7 @@ def upsert_events(events: list[dict]) -> int:
             if match:
                 merged_category, merged_categories = _merge_event_categories(dict(match), event)
             else:
+                from app.sync import canonical_category
                 merged_category = canonical_category(event.get("category", "")) or "✨ Другое"
                 try:
                     parsed_categories = json.loads(event.get("categories", "") or "[]")
