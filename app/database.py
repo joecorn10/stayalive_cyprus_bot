@@ -2,9 +2,28 @@
 
 import sqlite3
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.config import DATABASE_PATH
 
+
+def canonical_source_url(url: str) -> str:
+    """Canonicalize registered source URLs so tracking params do not create duplicates."""
+    value = str(url or "").strip()
+    if not value:
+        return value
+    parsed = urlparse(value)
+    host = parsed.netloc.casefold()
+    path = parsed.path.rstrip("/")
+    if host in {"instagram.com", "www.instagram.com"}:
+        handle = path.strip("/").split("/")[0]
+        if handle:
+            return f"https://www.instagram.com/{handle.casefold()}/"
+    if host == "t.me":
+        segment = path.strip("/").split("/")[0]
+        if segment:
+            return f"https://t.me/{segment}"
+    return value.split("#", 1)[0].split("?", 1)[0].rstrip("/") + "/"
 
 def get_connection() -> sqlite3.Connection:
     path = Path(DATABASE_PATH)
@@ -115,6 +134,10 @@ def init_db() -> None:
             ("Cyprus Underground", "https://www.cyprusunderground.com.cy/", "Website", "Electronic music, club nights, techno, house and rave events across Cyprus"),
             ("Facebook Cyprus Discovery", "site:facebook.com/events Cyprus (Limassol OR Nicosia OR Larnaca OR Paphos) event", "FacebookDiscovery", "Public Facebook events discovered through search indexing"),
         ]
+        seed_sources = [
+            (name, canonical_source_url(url), source_type, comment)
+            for name, url, source_type, comment in seed_sources
+        ]
         conn.executemany(
             """INSERT OR IGNORE INTO sources
                (name, url, type, comment)
@@ -129,6 +152,35 @@ def init_db() -> None:
         )
         conn.commit()
 
+    deduplicate_sources()
+
+
+def deduplicate_sources() -> int:
+    """Merge source registrations that resolve to the same canonical URL."""
+    removed = 0
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM sources ORDER BY id").fetchall()
+        keepers = {}
+        for row in rows:
+            key = (canonical_source_url(row["url"]), str(row["type"] or "").casefold())
+            keeper = keepers.get(key)
+            if keeper is None:
+                keepers[key] = row
+                canonical = canonical_source_url(row["url"])
+                if canonical != row["url"]:
+                    conn.execute("UPDATE sources SET url = ? WHERE id = ?", (canonical, row["id"]))
+                continue
+            conn.execute(
+                """INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url)
+                   SELECT event_id, ?, source_url
+                   FROM event_sources WHERE source_id = ?""",
+                (keeper["id"], row["id"]),
+            )
+            conn.execute("DELETE FROM event_sources WHERE source_id = ?", (row["id"],))
+            conn.execute("DELETE FROM sources WHERE id = ?", (row["id"],))
+            removed += 1
+        conn.commit()
+    return removed
 
 def list_sources() -> list[sqlite3.Row]:
     init_db()
@@ -142,11 +194,12 @@ def add_source(name: str, url: str, source_type: str, comment: str = "",
                category: str = "", city: str = "") -> bool:
     init_db()
     with get_connection() as conn:
+        canonical_url = canonical_source_url(url)
         cursor = conn.execute(
             """INSERT OR IGNORE INTO sources
                (name, url, type, comment, category, city)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (name, url, source_type, comment, category, city),
+            (name, canonical_url, source_type, comment, category, city),
         )
         conn.commit()
         return cursor.rowcount == 1
@@ -156,7 +209,7 @@ def get_source_by_url(url: str):
     init_db()
     with get_connection() as conn:
         return conn.execute(
-            "SELECT * FROM sources WHERE url = ?", (url,)
+            "SELECT * FROM sources WHERE url = ?", (canonical_source_url(url),)
         ).fetchone()
 
 
@@ -164,7 +217,7 @@ def update_source_comment(url: str, comment: str) -> None:
     init_db()
     with get_connection() as conn:
         conn.execute(
-            "UPDATE sources SET comment = ? WHERE url = ?", (comment, url)
+            "UPDATE sources SET comment = ? WHERE url = ?", (comment, canonical_source_url(url))
         )
         conn.commit()
 
