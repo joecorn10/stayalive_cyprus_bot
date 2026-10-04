@@ -1,14 +1,10 @@
 """Parser for Cyprus Underground event listings.
 
 Cyprus Underground is a JavaScript-rendered event directory.
-The parser uses three layers:
-
-1. Generic WebsiteParser for JSON-LD / normal HTML.
-2. Apify Web Scraper with a real browser when the page is JS-rendered.
-3. Direct requests/text parsing as a cheap final fallback.
+Use the normal HTTP parser first and fall back to local Playwright
+browser rendering when the event cards are not present in server HTML.
 """
 
-import os
 import re
 from datetime import datetime
 from urllib.parse import urljoin
@@ -22,11 +18,6 @@ from app.parsers.website import WebsiteParser
 
 HEADERS = {"User-Agent": "StayAliveCyprusBot/1.0"}
 
-APIFY_URL = (
-    "https://api.apify.com/v2/actors/"
-    "apify~web-scraper/run-sync-get-dataset-items"
-)
-
 DATE_RE = re.compile(
     r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+"
     r"(\d{1,2})(?:st|nd|rd|th)?\s+"
@@ -35,7 +26,6 @@ DATE_RE = re.compile(
     re.I,
 )
 
-# Also accept common formats that can appear after JS rendering.
 DATE_RE_ALT = re.compile(
     r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+"
     r"(\d{1,2})(?:st|nd|rd|th)?[\s./-]+"
@@ -44,7 +34,9 @@ DATE_RE_ALT = re.compile(
     re.I,
 )
 
-TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?$")
+TIME_RE = re.compile(
+    r"^(\d{1,2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?$"
+)
 
 CITY_RE = re.compile(
     r"\b(Limassol|Nicosia|Larnaca|Paphos|Famagusta)\b",
@@ -58,7 +50,7 @@ class CyprusUndergroundParser(EventParser):
 
     def parse(self) -> list[dict]:
         # ---------------------------------------------------------------
-        # 1. Cheap path: normal HTML / JSON-LD
+        # 1. Cheap HTTP / JSON-LD path
         # ---------------------------------------------------------------
         try:
             structured = WebsiteParser(self.url).parse()
@@ -83,127 +75,141 @@ class CyprusUndergroundParser(EventParser):
             return _unique(structured)
 
         # ---------------------------------------------------------------
-        # 2. Browser-rendered path: Apify
+        # 2. Local browser rendering
         # ---------------------------------------------------------------
         try:
-            rendered = self._fetch_via_apify()
+            rendered = self._fetch_via_playwright()
 
             if rendered:
-                events = self._parse_rendered_listing(rendered)
+                events = self._parse_rendered_page(rendered)
+
+                print(
+                    f"CYPRUS_UNDERGROUND_PLAYWRIGHT | {len(events)} events"
+                )
 
                 if events:
-                    print(
-                        f"CYPRUS_UNDERGROUND_APIFY | {len(events)} events"
-                    )
                     return _unique(events)
-
-                print("CYPRUS_UNDERGROUND_APIFY | 0 parsed events")
 
         except Exception as exc:
             print(
-                "CYPRUS_UNDERGROUND_APIFY_ERROR | "
+                "CYPRUS_UNDERGROUND_PLAYWRIGHT_ERROR | "
                 f"{type(exc).__name__}: {exc}"
             )
 
         # ---------------------------------------------------------------
-        # 3. Final cheap fallback
+        # 3. Final direct HTTP fallback
         # ---------------------------------------------------------------
         return self._text_cards()
 
-    def _fetch_via_apify(self) -> dict | None:
-        """Render the page in a real browser through Apify.
+    def _fetch_via_playwright(self) -> dict | None:
+        """Render Cyprus Underground with a real local Chromium browser."""
 
-        The browser returns the final visible text plus all event detail
-        links. This is intentionally more generic than relying on CSS
-        classes which can change frequently on the source website.
-        """
-
-        token = os.getenv("APIFY_API_TOKEN")
-
-        if not token:
-            print("CYPRUS_UNDERGROUND_APIFY | APIFY_API_TOKEN missing")
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            print(
+                "CYPRUS_UNDERGROUND_PLAYWRIGHT | "
+                "Playwright is not installed"
+            )
             return None
 
-        page_function = r"""
-async function pageFunction(context) {
-    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                ],
+            )
 
-    // Give the site's JavaScript time to populate the event directory.
-    await sleep(4000);
+            page = browser.new_page(
+                user_agent=HEADERS["User-Agent"],
+                viewport={
+                    "width": 1440,
+                    "height": 1200,
+                },
+            )
 
-    // Trigger lazy-loaded event cards.
-    window.scrollTo(0, document.body.scrollHeight);
-    await sleep(2500);
+            try:
+                print(
+                    "CYPRUS_UNDERGROUND_PLAYWRIGHT | "
+                    "loading page"
+                )
 
-    // A second scroll catches pages that progressively load more cards.
-    window.scrollTo(0, 0);
-    await sleep(1000);
+                page.goto(
+                    self.url,
+                    wait_until="domcontentloaded",
+                    timeout=60000,
+                )
 
-    const links = Array.from(
-        document.querySelectorAll('a[href*="/event/"]')
-    ).map(a => ({
-        url: a.href,
-        text: (a.innerText || a.textContent || "").trim()
-    }));
+                # The site populates the event list asynchronously.
+                page.wait_for_timeout(5000)
 
-    return {
-        url: location.href,
-        text: document.body.innerText || document.body.textContent || "",
-        links
-    };
-}
-"""
+                # Trigger lazy-loaded content.
+                page.evaluate(
+                    """
+                    () => {
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }
+                    """
+                )
 
-        payload = {
-            "startUrls": [{"url": self.url}],
-            "pageFunction": page_function,
-            "maxRequestsPerCrawl": 1,
-            "maxConcurrency": 1,
-        }
+                page.wait_for_timeout(2500)
 
-        response = requests.post(
-            APIFY_URL,
-            params={"token": token},
-            json=payload,
-            timeout=180,
-        )
+                page.evaluate(
+                    """
+                    () => {
+                        window.scrollTo(0, 0);
+                    }
+                    """
+                )
 
-        print(
-            "CYPRUS_UNDERGROUND_APIFY_HTTP | "
-            f"status={response.status_code}"
-        )
+                page.wait_for_timeout(1000)
 
-        response.raise_for_status()
+                text = page.locator("body").inner_text()
 
-        data = response.json()
+                links = page.locator('a[href*="/event/"]')
 
-        if not isinstance(data, list) or not data:
-            print("CYPRUS_UNDERGROUND_APIFY | empty dataset")
-            return None
+                event_links = []
 
-        # run-sync-get-dataset-items normally returns one item per page.
-        item = data[0]
+                for i in range(links.count()):
+                    link = links.nth(i)
 
-        if not isinstance(item, dict):
-            print("CYPRUS_UNDERGROUND_APIFY | invalid dataset item")
-            return None
+                    try:
+                        href = link.get_attribute("href") or ""
+                        label = link.inner_text().strip()
 
-        text = item.get("text", "")
-        links = item.get("links", [])
+                        if "/event/" not in href:
+                            continue
 
-        print(
-            "CYPRUS_UNDERGROUND_APIFY_DATA | "
-            f"text_chars={len(text)} links={len(links)}"
-        )
+                        event_links.append(
+                            {
+                                "url": urljoin(self.url, href),
+                                "text": re.sub(
+                                    r"\s+",
+                                    " ",
+                                    label,
+                                ).strip(),
+                            }
+                        )
+                    except Exception:
+                        continue
 
-        return {
-            "text": text,
-            "links": links,
-        }
+                print(
+                    "CYPRUS_UNDERGROUND_PLAYWRIGHT_DATA | "
+                    f"text_chars={len(text)} "
+                    f"event_links={len(event_links)}"
+                )
 
-    def _parse_rendered_listing(self, rendered: dict) -> list[dict]:
-        """Parse the visible browser-rendered listing."""
+                return {
+                    "text": text,
+                    "links": event_links,
+                }
 
+            finally:
+                browser.close()
+
+    def _parse_rendered_page(self, rendered: dict) -> list[dict]:
         text = rendered.get("text", "")
         links = rendered.get("links", [])
 
@@ -212,24 +218,7 @@ async function pageFunction(context) {
 
         lines = _clean_lines(text)
 
-        # Keep only actual event URLs.
-        event_links = []
-        for item in links:
-            if not isinstance(item, dict):
-                continue
-
-            href = item.get("url", "")
-            label = item.get("text", "")
-
-            if href and "/event/" in href:
-                event_links.append(
-                    {
-                        "url": href,
-                        "text": re.sub(r"\s+", " ", label).strip(),
-                    }
-                )
-
-        return self._parse_lines(lines, event_links)
+        return self._parse_lines(lines, links)
 
     def _text_cards(self) -> list[dict]:
         response = requests.get(
@@ -237,6 +226,7 @@ async function pageFunction(context) {
             timeout=20,
             headers=HEADERS,
         )
+
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -260,10 +250,18 @@ async function pageFunction(context) {
 
         events = self._parse_lines(
             lines,
-            [{"url": url, "text": ""} for url in event_links],
+            [
+                {
+                    "url": urljoin(self.url, href),
+                    "text": "",
+                }
+                for href in event_links
+            ],
         )
 
-        print(f"CYPRUS_UNDERGROUND_TEXT | {len(events)} events")
+        print(
+            f"CYPRUS_UNDERGROUND_TEXT | {len(events)} events"
+        )
 
         return _unique(events)
 
@@ -272,8 +270,6 @@ async function pageFunction(context) {
         lines: list[str],
         event_links: list[dict],
     ) -> list[dict]:
-        """Convert the listing's visible text into normalized events."""
-
         events: list[dict] = []
 
         current_date = None
@@ -296,10 +292,8 @@ async function pageFunction(context) {
             )
 
             if time_index is None:
-                card = []
                 return
 
-            # The event title is normally the first meaningful line.
             title = _find_title(card[:time_index])
 
             if not title:
@@ -308,8 +302,8 @@ async function pageFunction(context) {
 
             time_value = card[time_index]
 
-            # The line after the time is usually the venue.
             venue = ""
+
             if time_index + 1 < len(card):
                 venue = card[time_index + 1]
 
@@ -317,7 +311,10 @@ async function pageFunction(context) {
             city = city_match.group(1) if city_match else ""
 
             if city:
-                venue = CITY_RE.sub("", venue).strip(" ,-–")
+                venue = CITY_RE.sub(
+                    "",
+                    venue,
+                ).strip(" ,-–")
 
             price_match = re.search(
                 r"€\s?\d+(?:[.,]\d+)?",
@@ -330,30 +327,40 @@ async function pageFunction(context) {
                 title,
             ).strip()
 
-            ticket_url = self.url
-
-            matched_url = _match_event_url(
+            ticket_url = _match_event_url(
                 clean_title,
-                card,
                 event_links,
             )
 
-            if matched_url:
-                ticket_url = matched_url
+            if not ticket_url:
+                ticket_url = self.url
 
-            description_lines = [
-                value
-                for i, value in enumerate(card)
-                if i != time_index
-                and value != title
-                and value != venue
-                and not TIME_RE.match(value)
-            ]
+            description_lines = []
+
+            for i, value in enumerate(card):
+                if i == time_index:
+                    continue
+
+                if value == title:
+                    continue
+
+                if value == venue:
+                    continue
+
+                if TIME_RE.match(value):
+                    continue
+
+                if _looks_like_ui(value):
+                    continue
+
+                description_lines.append(value)
 
             events.append(
                 {
                     "title": clean_title[:200],
-                    "description": " · ".join(description_lines)[:4000],
+                    "description": " · ".join(
+                        description_lines
+                    )[:4000],
                     "date": current_date,
                     "end_date": current_date,
                     "time": time_value,
@@ -385,20 +392,11 @@ async function pageFunction(context) {
             if not current_date:
                 continue
 
-            # Navigation/UI noise.
-            if line.casefold() in {
-                "search",
-                "genre:",
-                "genres:",
-                "i",
-                "events",
-                "event",
-            }:
+            if _looks_like_ui(line):
                 continue
 
             card.append(line)
 
-            # Most cards end immediately after their time.
             if TIME_RE.match(line):
                 flush()
 
@@ -437,14 +435,13 @@ def _parse_date_line(line: str):
 
 
 def _find_title(lines: list[str]) -> str:
-    """Find the first useful event-title line."""
-
     ignored = {
         "search",
         "genre:",
         "genres:",
         "events",
         "event",
+        "i",
     }
 
     for line in lines:
@@ -459,8 +456,7 @@ def _find_title(lines: list[str]) -> str:
         if TIME_RE.match(clean):
             continue
 
-        # Skip obvious UI/category labels.
-        if clean.lower().startswith(("genre:", "genres:")):
+        if _looks_like_ui(clean):
             continue
 
         return clean
@@ -468,13 +464,30 @@ def _find_title(lines: list[str]) -> str:
     return ""
 
 
+def _looks_like_ui(value: str) -> bool:
+    value = value.strip().casefold()
+
+    if not value:
+        return True
+
+    return value in {
+        "search",
+        "genre:",
+        "genres:",
+        "location",
+        "location permission required",
+        "events",
+        "event",
+        "i",
+        "more",
+        "load more",
+    }
+
+
 def _match_event_url(
     title: str,
-    card: list[str],
     event_links: list[dict],
 ) -> str:
-    """Match an event title to the corresponding /event/ URL."""
-
     if not event_links:
         return ""
 
@@ -502,16 +515,26 @@ def _match_event_url(
 
         if title_norm == label_norm:
             score = 100
-        elif title_norm in label_norm or label_norm in title_norm:
+
+        elif (
+            title_norm in label_norm
+            or label_norm in title_norm
+        ):
             score = 80
+
         else:
             title_words = set(title_norm.split())
             label_words = set(label_norm.split())
 
             if title_words and label_words:
-                overlap = len(title_words & label_words)
+                overlap = len(
+                    title_words & label_words
+                )
+
                 score = int(
-                    60 * overlap / max(len(title_words), 1)
+                    60
+                    * overlap
+                    / max(len(title_words), 1)
                 )
 
         if score > best_score:
@@ -521,35 +544,29 @@ def _match_event_url(
     if best_score >= 45:
         return best_url
 
-    # Last resort: compare the URL slug with the title.
-    title_slug = re.sub(
-        r"[^a-z0-9]+",
-        "-",
-        title.lower(),
-    ).strip("-")
-
-    for item in event_links:
-        href = item.get("url", "")
-        slug = href.rstrip("/").rsplit("/", 1)[-1].lower()
-
-        if (
-            slug
-            and title_slug
-            and (
-                title_slug[:30] in slug
-                or slug[:30] in title_slug
-            )
-        ):
-            return href
-
     return ""
 
 
 def _normalize_match_text(value: str) -> str:
     value = value.lower()
-    value = re.sub(r"€\s?\d+(?:[.,]\d+)?", "", value)
-    value = re.sub(r"[^a-z0-9]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
+
+    value = re.sub(
+        r"€\s?\d+(?:[.,]\d+)?",
+        "",
+        value,
+    )
+
+    value = re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        value,
+    )
+
+    return re.sub(
+        r"\s+",
+        " ",
+        value,
+    ).strip()
 
 
 def _unique(events: list[dict]) -> list[dict]:
