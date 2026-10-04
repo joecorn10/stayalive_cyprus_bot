@@ -209,14 +209,20 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
     payload = {"usernames": [username]}
 
     try:
-        with APIFY_CONCURRENCY:
-            response = requests.post(
-                endpoint,
-                params={"token": token},
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=120,
-            )
+        response = None
+        for attempt in range(3):
+            with APIFY_CONCURRENCY:
+                response = requests.post(
+                    endpoint,
+                    params={"token": token},
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=120,
+                )
+            if response.status_code not in {402, 429} or attempt == 2:
+                break
+            import time
+            time.sleep(8 * (attempt + 1))
         if not 200 <= response.status_code < 300:
             logger.warning(
                 "Apify Instagram scraper returned HTTP %s for @%s: %s",
