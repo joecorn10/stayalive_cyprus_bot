@@ -73,8 +73,11 @@ def main():
     ).fetchall()
     print("SOURCE_DUPLICATES")
     source_seen = {}
+    semantic_seen = {}
     for source in source_rows:
-        key = (norm(source["url"]), source["type"])
+        url = str(source["url"] or "").strip()
+        source_type = str(source["type"] or "").strip()
+        key = (norm(url), source_type)
         if key in source_seen:
             previous = source_seen[key]
             print(
@@ -83,6 +86,27 @@ def main():
             )
         else:
             source_seen[key] = source
+
+        semantic_key = None
+        if source_type.casefold() == "instagram":
+            match = re.search(r"instagram\.com/([^/?#]+)", url, re.I)
+            if match:
+                semantic_key = ("instagram", match.group(1).casefold())
+        elif source_type.casefold() in {"telegram", "telegrampinned"}:
+            match = re.search(r"t\.me/([^/?#]+)", url, re.I)
+            if match:
+                semantic_key = ("telegram", match.group(1).casefold())
+        else:
+            semantic_key = (source_type.casefold(), norm(source["name"]))
+
+        if semantic_key in semantic_seen:
+            previous = semantic_seen[semantic_key]
+            print(
+                f"SOURCE_SEMANTIC_DUPLICATE | {previous['id']} | {previous['name']} | {previous['url']} || "
+                f"{source['id']} | {source['name']} | {source['url']}"
+            )
+        else:
+            semantic_seen[semantic_key] = source
 
     print("CATEGORY_WITH_MULTIPLE_NAMES")
     category_titles = defaultdict(Counter)
