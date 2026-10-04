@@ -212,7 +212,6 @@ def _normalize(events: list[dict]) -> list[dict]:
                 "time",
                 "venue",
                 "city",
-                "category",
             )
         )
         event["content_hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -353,7 +352,7 @@ def sync_all() -> int:
     if recategorized:
         logger.info("Reclassified %s existing events", recategorized)
 
-    deduplicated = deduplicate_exact_events()
+    deduplicated = deduplicate_events()
     if deduplicated:
         logger.info("Merged %s exact duplicate events", deduplicated)
 
