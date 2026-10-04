@@ -108,6 +108,27 @@ def main():
         else:
             semantic_seen[semantic_key] = source
 
+    today_rows = conn.execute(
+        """SELECT e.id, e.title, e.date, e.end_date, e.time, e.venue, e.city,
+                  e.category, e.categories,
+                  GROUP_CONCAT(DISTINCT s.name) AS sources
+           FROM events e
+           LEFT JOIN event_sources es ON es.event_id = e.id
+           LEFT JOIN sources s ON s.id = es.source_id
+           WHERE e.date <= date('now')
+             AND COALESCE(e.end_date, e.date) >= date('now')
+           GROUP BY e.id
+           ORDER BY e.time, e.id"""
+    ).fetchall()
+    print("TODAY_EVENT_COUNT", len(today_rows))
+    for row in today_rows:
+        print(
+            f"TODAY_EVENT | id={row['id']} | {row['date']}->{row['end_date']} | "
+            f"{row['category']} | categories={row['categories']} | "
+            f"title={row['title']} | venue={row['venue']} | city={row['city']} | "
+            f"sources={row['sources']}"
+        )
+
     print("CATEGORY_WITH_MULTIPLE_NAMES")
     category_titles = defaultdict(Counter)
     for row in rows:
