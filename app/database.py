@@ -305,6 +305,13 @@ def _identity_text(value: str) -> str:
         "я":"ya",
     })
     value = value.translate(translit)
+    value = re.sub(r"\bflavou?rs?\b", "flavour", value)
+    value = re.sub(r"\bflavors?\b", "flavour", value)
+    value = re.sub(r"\btrees\b", "tree", value)
+    value = re.sub(r"\bolives\b", "olive", value)
+    value = re.sub(r"\bmarkets\b", "market", value)
+    value = re.sub(r"\bworkshops\b", "workshop", value)
+    value = re.sub(r"\bexhibitions\b", "exhibition", value)
     return " ".join(value.split())
 
 
@@ -325,13 +332,20 @@ def _identity_tokens(value: str) -> set[str]:
 
 def _identity_key(event: dict) -> str:
     import hashlib
+    city = _identity_text(event.get("city", ""))
+    venue = _identity_text(event.get("venue", ""))
+    time = _identity_text(event.get("time", ""))
+    title_tokens = _identity_tokens(event.get("title", ""))
+    title_tokens -= _identity_tokens(city)
+    title_tokens -= _identity_tokens(venue)
+    title_tokens -= _identity_tokens(time)
     parts = [
         str(event.get("date", "")).strip(),
         str(event.get("end_date") or event.get("date", "")).strip(),
-        _identity_text(event.get("city", "")),
-        _identity_text(event.get("venue", "")),
-        _identity_text(event.get("time", "")),
-        " ".join(sorted(_identity_tokens(event.get("title", "")))),
+        city,
+        venue,
+        time,
+        " ".join(sorted(title_tokens)),
     ]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
@@ -387,13 +401,15 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     from difflib import SequenceMatcher
     import re
 
-    title_tokens = _identity_tokens(event.get("title", ""))
-    if not title_tokens:
-        return None
-
     city = _identity_text(event.get("city", ""))
     venue = _identity_text(event.get("venue", ""))
     time = _identity_text(event.get("time", ""))
+    title_tokens = _identity_tokens(event.get("title", ""))
+    title_tokens -= _identity_tokens(city)
+    title_tokens -= _identity_tokens(venue)
+    title_tokens -= _identity_tokens(time)
+    if not title_tokens:
+        return None
     description_tokens = _identity_tokens(event.get("description", ""))
 
     rows = conn.execute(
@@ -410,12 +426,14 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
         if exclude_id is not None and row["id"] == exclude_id:
             continue
         other_tokens = _identity_tokens(row["title"])
-        if not other_tokens:
-            continue
-
         row_city = _identity_text(row["city"])
         row_venue = _identity_text(row["venue"])
         row_time = _identity_text(row["time"])
+        other_tokens -= _identity_tokens(row_city)
+        other_tokens -= _identity_tokens(row_venue)
+        other_tokens -= _identity_tokens(row_time)
+        if not other_tokens:
+            continue
 
         if city and row_city and city != row_city:
             continue
