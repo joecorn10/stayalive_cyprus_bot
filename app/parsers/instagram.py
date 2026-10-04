@@ -801,8 +801,13 @@ def _find_venue(text: str) -> str:
 def _find_category(text: str) -> str:
     lowered = text.casefold()
     categories = (
-        ("Концерты", ("concert", "live music", "live", "band", "dj")),
-        ("Вечеринки", ("party", "night", "oktoberfest")),
+        ("Вечеринки", (
+            "party", "night", "club", "rave", "disco", "dj", "djs",
+            "techno", "house", "trance", "drum'n'bass", "dnb", "electro",
+            "пати", "вечерин", "клуб", "рейв", "дискотек", "диджей",
+            "техно", "хаус", "транс",
+        )),
+        ("Концерты", ("concert", "live music", "live", "band", "gig", "singer")),
         ("Дегустации", ("tasting", "дегустац")),
         ("Выставки", ("exhibition", "gallery opening", "выстав")),
         ("Мастер-классы", ("workshop", "мастер-класс")),
