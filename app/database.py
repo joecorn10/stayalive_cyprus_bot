@@ -236,7 +236,16 @@ def upsert_events(events: list[dict]) -> int:
                 ),
             ).fetchone()
 
-            match = existing or _find_matching_event(conn, event)
+            # A content hash can collide when the same event is syndicated by
+            # multiple sources. Reuse the existing row instead of letting the
+            # UNIQUE constraint abort the whole source batch.
+            by_hash = None
+            if event.get("content_hash"):
+                by_hash = conn.execute(
+                    "SELECT * FROM events WHERE content_hash = ? LIMIT 1",
+                    (event.get("content_hash"),),
+                ).fetchone()
+            match = existing or by_hash or _find_matching_event(conn, event)
 
             values = (
                 event.get("title", ""),
