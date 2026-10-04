@@ -31,7 +31,6 @@ def test_translated_titles_have_same_identity():
         database._identity_tokens(a["title"]),
         database._identity_tokens(b["title"]),
     )
-    assert database._identity_key(a) == database._identity_key(b)
 
 
 def test_program_fragment_has_same_identity_as_event():
@@ -57,6 +56,7 @@ def test_jazz_titles_match_across_languages():
         database._identity_tokens(a["title"]),
         database._identity_tokens(b["title"]),
     )
+    assert database._identity_key(a) == database._identity_key(b)
     assert database._identity_key(a) == database._identity_key(b)
 
 
