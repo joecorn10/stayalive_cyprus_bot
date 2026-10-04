@@ -19,7 +19,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
-from app.sync import _event_categories, canonical_category, recategorize_existing_events, sync_all
+from app.sync import _event_categories, canonical_category, recategorize_existing_events
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -273,22 +273,25 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
             return chat_id, WELCOME_TEXT, main_menu()
         if action == "today":
             set_chat_state(chat_id, "idle")
-            try:
-                sync_all()
-            except Exception as exc:
-                print(f"Full sync failed: {exc}")
+            # Telegram navigation must never start a full source sync. The
+            # event catalogue is refreshed independently by the scheduled
+            # Event Sync workflow, so this callback can finish immediately
+            # and cannot be killed by a Render restart during a long scrape.
             today = cyprus_today()
-            text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()), display_date=today)
+            text, keyboard = format_events(
+                "📅 Сегодня",
+                list_events(today.isoformat(), today.isoformat()),
+                display_date=today,
+            )
             return chat_id, text, keyboard or main_menu()
         if action == "week":
             set_chat_state(chat_id, "idle")
-            try:
-                sync_all()
-            except Exception as exc:
-                print(f"Full sync failed: {exc}")
             today = cyprus_today()
             end = today + timedelta(days=6)
-            text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
+            text, keyboard = format_events(
+                "🗓 На этой неделе",
+                list_events(today.isoformat(), end.isoformat()),
+            )
             return chat_id, text, keyboard or main_menu()
         if action == "sources":
             set_chat_state(chat_id, "idle")
@@ -405,11 +408,8 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: refreshing all sources before building results")
-        try:
-            sync_all()
-        except Exception as exc:
-            print(f"Full sync failed: {exc}")
+        # The catalogue is refreshed by the scheduled Event Sync workflow.
+        # Never block a Telegram response on a full multi-source scrape.
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -420,14 +420,12 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: refreshing all sources before building results")
-        try:
-            sync_all()
-        except Exception as exc:
-            print(f"Full sync failed: {exc}")
         today = cyprus_today()
         end = today + timedelta(days=6)
-        text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
+        text, keyboard = format_events(
+            "🗓 На этой неделе",
+            list_events(today.isoformat(), end.isoformat()),
+        )
         return text, keyboard or main_menu()
 
     if text == "📚 Источники":
