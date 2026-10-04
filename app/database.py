@@ -348,7 +348,7 @@ def _identity_title_tokens(event: dict) -> set[str]:
     # build_event_comment() starts with a Russian translation of the title.
     # Use only the first sentence so venue/details from the comment cannot
     # become part of the event name identity.
-    first_sentence = re.split(r"(?<=[.!?])\\s+", description, maxsplit=1)[0].strip()
+    first_sentence = re.split(r"(?<=[.!?])\s+", description, maxsplit=1)[0].strip()
     if not first_sentence:
         first_sentence = description.strip()
     comment_tokens = _identity_tokens(first_sentence)
