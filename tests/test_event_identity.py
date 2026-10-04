@@ -25,6 +25,8 @@ def _event(title, date="2026-10-04", end_date=None, time="", venue="", city="Lim
 def test_translated_titles_have_same_identity():
     a = _event("Doros (Traditional Flavours Festival)", city="Doros")
     b = _event("Дорос (Фестиваль традиционных вкусов)", city="Doros")
+    print("DOROS A", database._identity_text(a["title"]), database._identity_tokens(a["title"]), database._identity_key(a))
+    print("DOROS B", database._identity_text(b["title"]), database._identity_tokens(b["title"]), database._identity_key(b))
     assert database._identity_key(a) == database._identity_key(b)
 
 
