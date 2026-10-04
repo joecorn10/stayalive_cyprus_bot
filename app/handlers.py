@@ -20,7 +20,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
-from app.sync import _event_categories, canonical_category, recategorize_existing_events
+from app.sync import _event_categories, canonical_category
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -113,14 +113,24 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
     selected = [event for event in events if category in _event_categories(event)]
     if not selected:
         return f"{category}\n\nПока событий в этом направлении нет.", back_keyboard(period)
+
+    # Telegram editMessageText has a 4096-character limit. Category pages can
+    # contain many events, so keep the catalogue view deliberately compact:
+    # title + time/location/price. Full descriptions remain available on the
+    # source/event page and are not needed to browse a category.
     lines = [f"{category} · {len(selected)}", ""]
     current_day = None
-    for event in selected[:30]:
+    shown = 0
+    max_events = 30
+
+    for event in selected:
+        if shown >= max_events:
+            break
         try:
             event_day = datetime.fromisoformat(str(event["date"])).date()
         except (TypeError, ValueError):
-            # One malformed legacy row must never break an entire category.
             continue
+
         day_key = event_day.isoformat()
         if day_key != current_day:
             if current_day is not None:
@@ -128,14 +138,14 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             lines.append(f"📅 {_date_label(event['date'])}")
             lines.append("")
             current_day = day_key
+
         title = escape(str(event["title"]))
         source_url = str(event["ticket_url"] or event["source_url"] or "").strip()
         if source_url:
-            # The event title itself is the source link.
-            # This keeps the list compact and avoids separate event URL buttons.
             lines.append(f'• <a href="{escape(source_url, quote=True)}">{title}</a>')
         else:
             lines.append(f"• {title}")
+
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
@@ -145,15 +155,15 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             meta.append(f"📍 {str(event['venue'])}")
         if event["price"]:
             meta.append(f"💶 {str(event['price'])}")
-        if event["description"]:
-            comment = " ".join(str(event["description"]).split())
-            lines.append(f"  {escape(comment)}")
         if meta:
             lines.append(" · ".join(meta))
         if event["end_date"] and event["end_date"] != event["date"]:
             lines.append(f"↳ до {_date_label(event['end_date'])}")
         lines.append("")
-    # No separate event URL buttons: the title links above are the only event links.
+        shown += 1
+
+    if len(selected) > shown:
+        lines.append(f"… и ещё {len(selected) - shown}.")
     return "\n".join(lines).rstrip(), back_keyboard(period)
 
 
@@ -348,16 +358,6 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
                 category = legacy_map.get(slug)
         if not category:
             return chat_id, "Неизвестное направление.", None
-        # Re-apply the current semantic category rules before opening a
-        # category. This is important after a parser/category-rule update:
-        # existing events should move into Nightlife/Festivals immediately,
-        # without waiting for the next full sync.
-        try:
-            changed = recategorize_existing_events()
-            if changed:
-                print(f"Telegram category refresh: reclassified {changed} events")
-        except Exception as exc:
-            print(f"Telegram category reclassification failed: {exc}")
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
         events = list_events_for_period(today.isoformat(), end.isoformat(), category)
