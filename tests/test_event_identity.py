@@ -143,6 +143,7 @@ def test_semantic_dedupe_ignores_venue_formatting_when_title_is_exact():
         )
         database.upsert_events([a])
         b["content_hash"] = "different"
+        b["identity_key"] = database._identity_key(b)
         with database.get_connection() as conn:
             conn.execute(
                 """INSERT INTO events
