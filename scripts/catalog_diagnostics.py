@@ -116,6 +116,30 @@ def main():
         variants = [title for title, count in titles.items() if count > 1]
         if variants:
             print(f"CATEGORY_REPEAT | {category} | {len(variants)} repeated normalized titles")
+            for variant in variants[:30]:
+                matches = [row for row in rows if (row["category"] or "✨ Другое") == category and norm(row["title"]) == variant]
+                for row in matches:
+                    print(
+                        f"CATEGORY_REPEAT_ITEM | {category} | {variant} | "
+                        f"id={row['id']} | {row['date']} | {norm(row['time'])} | "
+                        f"{norm(row['venue'])} | {norm(row['city'])} | {row['title']}"
+                    )
+
+    identity_groups = defaultdict(list)
+    for row in rows:
+        identity = str(row["identity_key"] or "").strip()
+        if identity:
+            identity_groups[identity].append(row)
+    identity_duplicates = [items for items in identity_groups.values() if len(items) > 1]
+    print("IDENTITY_KEY_DUPLICATES", len(identity_duplicates))
+    for items in identity_duplicates[:50]:
+        print(
+            "IDENTITY_DUPLICATE | " +
+            " || ".join(
+                f"id={row['id']} | {row['date']} | {row['category']} | {row['title']} | {row['venue']} | {row['city']}"
+                for row in items
+            )
+        )
 
 if __name__ == "__main__":
     main()
