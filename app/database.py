@@ -993,24 +993,20 @@ def deduplicate_exact_events() -> int:
     return removed
 
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
+    """Read the prepared event catalogue without mutating or fuzzy-filtering it.
+
+    Deduplication belongs to the sync pipeline. Running fuzzy deduplication on
+    every Telegram view can hide legitimate events that happen on the same
+    day, at the same venue, or share generic title words.
+    """
     init_db()
-    deduplicate_exact_events()
     with get_connection() as conn:
-        rows = conn.execute(
+        return conn.execute(
             """SELECT * FROM events
                WHERE date <= ? AND COALESCE(end_date, date) >= ?
                ORDER BY date, time, title COLLATE NOCASE""",
             (end_date, start_date),
         ).fetchall()
-
-    unique = []
-    for row in rows:
-        if any(_looks_like_duplicate_event(row, existing) for existing in unique):
-            continue
-        unique.append(row)
-    return unique
-
-
 
 def cache_is_fresh(cache_key: str, ttl_minutes: int = 30) -> bool:
     init_db()
