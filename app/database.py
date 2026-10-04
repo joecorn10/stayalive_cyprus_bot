@@ -332,33 +332,13 @@ def _identity_tokens(value: str) -> set[str]:
 
 
 def _identity_title_tokens(event: dict) -> set[str]:
-    """Build language-independent title tokens without changing the stored title.
+    """Build semantic title tokens from the original source title only.
 
-    Event titles stay exactly as sourced. When our Russian comment contains the
-    translated title, use that comment as the identity language for non-Russian
-    titles. This lets an English source and a Russian source converge on the
-    same event without maintaining a growing hand-written translation dictionary.
+    The stored title is deliberately never translated. Identity is based on
+    source title semantics plus structured event context, not a hidden
+    translated copy in description.
     """
-    import re
-
-    title = str(event.get("title", "") or "")
-    description = str(event.get("description", "") or "")
-    title_tokens = _identity_tokens(title)
-
-    # build_event_comment() starts with a Russian translation of the title.
-    # Use only the first sentence so venue/details from the comment cannot
-    # become part of the event name identity.
-    first_sentence = re.split(r"(?<=[.!?])\s+", description, maxsplit=1)[0].strip()
-    if not first_sentence:
-        first_sentence = description.strip()
-    comment_tokens = _identity_tokens(first_sentence)
-
-    has_cyrillic_title = bool(re.search(r"[а-яё]", title, re.I))
-    has_cyrillic_comment = bool(re.search(r"[а-яё]", first_sentence, re.I))
-
-    if comment_tokens and has_cyrillic_comment and not has_cyrillic_title:
-        return comment_tokens
-    return title_tokens
+    return _identity_tokens(str(event.get("title", "") or ""))
 
 
 def _identity_key(event: dict) -> str:
@@ -441,7 +421,6 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     title_tokens -= _identity_tokens(time)
     if not title_tokens:
         return None
-    description_tokens = _identity_tokens(event.get("description", ""))
 
     rows = conn.execute(
         """SELECT * FROM events
@@ -452,6 +431,8 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
 
     best = None
     best_score = 0.0
+    event_ticket = _identity_text(event.get("ticket_url", ""))
+    event_source = _identity_text(event.get("source_url", ""))
 
     for row in rows:
         if exclude_id is not None and row["id"] == exclude_id:
@@ -460,6 +441,27 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
         row_city = _identity_text(row["city"])
         row_venue = _identity_text(row["venue"])
         row_time = _identity_text(row["time"])
+        row_ticket = _identity_text(row["ticket_url"])
+        row_source = _identity_text(row["source_url"])
+
+        # Structured identity outranks title wording.
+        if event_ticket and row_ticket and event_ticket == row_ticket:
+            best = row
+            best_score = 1.50
+            continue
+
+        same_source_slot = (
+            event.get("date", "") == row["date"]
+            and (event.get("end_date") or event.get("date", "")) == (row["end_date"] or row["date"])
+            and event_source and row_source and event_source == row_source
+            and time == row_time
+            and venue == row_venue
+            and city == row_city
+        )
+        if same_source_slot and (title_tokens or other_tokens):
+            best = row
+            best_score = 1.35
+            continue
         other_tokens -= _identity_tokens(row_city)
         other_tokens -= _identity_tokens(row_venue)
         other_tokens -= _identity_tokens(row_time)
@@ -491,13 +493,6 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
         if venue_conflict and not strong_title_match:
             continue
 
-        other_description_tokens = _identity_tokens(row["description"])
-        description_overlap = 0.0
-        if description_tokens and other_description_tokens:
-            description_overlap = len(description_tokens & other_description_tokens) / max(
-                1, min(len(description_tokens), len(other_description_tokens))
-            )
-
         context = 0.0
         if city and row_city and city == row_city:
             context += 0.08
@@ -516,13 +511,12 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
         ))
         subset_match = bool(title_tokens <= other_tokens or other_tokens <= title_tokens)
 
-        score = max(overlap, jaccard * 1.15, sequence * 0.92, description_overlap * 0.85)
+        score = max(overlap, jaccard * 1.15, sequence * 0.92)
         score += context
 
         accept = (
             overlap >= 0.80
             or sequence >= 0.90
-            or description_overlap >= 0.82
             or (subset_match and (generic_fragment or other_generic_fragment) and overlap >= 0.65)
         )
         if accept and score > best_score:
