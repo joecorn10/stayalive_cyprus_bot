@@ -502,6 +502,32 @@ def deduplicate_exact_events() -> int:
             if not title:
                 continue
 
+            def strong_context_match(candidate, current):
+                if not compatible(candidate, current):
+                    return False
+                time_a = normalize(candidate["time"])
+                time_b = normalize(current["time"])
+                venue_a = normalize(candidate["venue"])
+                venue_b = normalize(current["venue"])
+                category_a = normalize(candidate["category"])
+                category_b = normalize(current["category"])
+
+                # A generic location such as "Cyprus" is not a useful venue.
+                generic_venues = {"cyprus", "limassol", "nicosia", "larnaca", "paphos"}
+                if venue_a in generic_venues:
+                    venue_a = ""
+                if venue_b in generic_venues:
+                    venue_b = ""
+
+                # Same date + exact time + exact venue + same category is a
+                # strong cross-source fingerprint, even when one title is
+                # translated and the other is English.
+                return (
+                    time_a and time_b and time_a == time_b
+                    and venue_a and venue_b and venue_a == venue_b
+                    and category_a and category_b and category_a == category_b
+                )
+
             keeper = next(
                 (
                     candidate
@@ -510,6 +536,7 @@ def deduplicate_exact_events() -> int:
                     and (
                         normalize(candidate["title"]) == title
                         or _looks_like_duplicate_event(candidate, row)
+                        or strong_context_match(candidate, row)
                     )
                 ),
                 None,
