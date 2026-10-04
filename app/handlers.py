@@ -131,10 +131,10 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
         meta = []
         if event["time"]:
             meta.append(f"🕐 {str(event['time'])}")
-        if event["venue"]:
-            meta.append(f"📍 {str(event['venue'])}")
-        elif event["city"]:
+        if event["city"]:
             meta.append(f"📍 {str(event['city'])}")
+        elif event["venue"]:
+            meta.append(f"📍 {str(event['venue'])}")
         if event["price"]:
             meta.append(f"💶 {str(event['price'])}")
         if meta:
