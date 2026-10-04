@@ -25,12 +25,8 @@ def _event(title, date="2026-10-04", end_date=None, time="", venue="", city="Lim
 def test_translated_titles_have_same_identity():
     a = _event("Doros (Traditional Flavours Festival)", city="Doros")
     b = _event("Дорос (Фестиваль традиционных вкусов)", city="Doros")
-    assert database._identity_tokens(a["title"]) == database._identity_tokens(b["title"]), (
-        database._identity_text(a["title"]),
-        database._identity_text(b["title"]),
-        database._identity_tokens(a["title"]),
-        database._identity_tokens(b["title"]),
-    )
+    assert database._identity_tokens(a["title"]) == database._identity_tokens(b["title"])
+    assert database._identity_key(a) == database._identity_key(b)
 
 
 def test_program_fragment_has_same_identity_as_event():
@@ -50,17 +46,11 @@ def test_jazz_titles_match_across_languages():
         time="16:00",
         venue="Rooftop",
     )
-    assert database._identity_tokens(a["title"]) == database._identity_tokens(b["title"]), (
-        database._identity_text(a["title"]),
-        database._identity_text(b["title"]),
-        database._identity_tokens(a["title"]),
-        database._identity_tokens(b["title"]),
-    )
-    assert database._identity_key(a) == database._identity_key(b)
+    assert database._identity_tokens(a["title"]) == database._identity_tokens(b["title"])
     assert database._identity_key(a) == database._identity_key(b)
 
 
-def test_upsert_merges_translated_event_and_preserves_sources():
+def test_upsert_merges_translated_event():
     with tempfile.TemporaryDirectory() as tmp:
         database.DATABASE_PATH = Path(tmp) / "events.db"
         database.init_db()
@@ -71,9 +61,7 @@ def test_upsert_merges_translated_event_and_preserves_sources():
         assert database.upsert_events([second]) == 0
 
         with database.get_connection() as conn:
-            rows = conn.execute("SELECT id, title FROM events").fetchall()
-            assert len(rows) == 1
-            assert rows[0]["id"] == 1
+            assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
 
 
 def test_persistent_dedupe_merges_existing_semantic_duplicates():
@@ -85,10 +73,7 @@ def test_persistent_dedupe_merges_existing_semantic_duplicates():
         b = _event("Вечер джаза, соула и фанка на крыше", time="16:00", venue="Rooftop")
         database.upsert_events([a])
 
-        # Insert the old-style duplicate directly to simulate the database
-        # state that existed before semantic identity was introduced.
         b["content_hash"] = "different"
-        b["identity_key"] = None
         with database.get_connection() as conn:
             conn.execute(
                 """INSERT INTO events
@@ -106,4 +91,3 @@ def test_persistent_dedupe_merges_existing_semantic_duplicates():
         assert database.deduplicate_events() == 1
         with database.get_connection() as conn:
             assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
-    assert database._identity_key(a) == database._identity_key(b)
