@@ -91,3 +91,33 @@ def test_persistent_dedupe_merges_existing_semantic_duplicates():
         assert database.deduplicate_events() == 1
         with database.get_connection() as conn:
             assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+
+
+def test_title_category_beats_noisy_description():
+    from app.sync import classify_event
+
+    picnic = {
+        "title": "Место для пикника Кавалларкас",
+        "description": "Join us for music, dancing and a night of fun.",
+        "category": "",
+        "source_url": "",
+        "venue": "",
+    }
+    theatre = {
+        "title": "The Corridor. A Contemporary Dance Performance",
+        "description": "An evening with music, DJs and a lively atmosphere.",
+        "category": "",
+        "source_url": "",
+        "venue": "",
+    }
+    party = {
+        "title": "Sunday Reunion",
+        "description": "DJ set, house music and dancing all night long.",
+        "category": "",
+        "source_url": "",
+        "venue": "",
+    }
+
+    assert classify_event(picnic) == "🏃 Спорт и outdoor"
+    assert classify_event(theatre) == "🎭 Театр и кино"
+    assert classify_event(party) == "🪩 Nightlife"
