@@ -39,6 +39,11 @@ jobs:
         run: |
           python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
 
+      - name: Diagnose catalog quality
+        if: always()
+        run: |
+          python scripts/catalog_diagnostics.py | tee /tmp/catalog_diagnostics.txt
+
       - name: Persist database
         if: always()
         run: |
