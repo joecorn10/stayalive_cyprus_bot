@@ -74,6 +74,7 @@ def test_persistent_dedupe_merges_existing_semantic_duplicates():
         database.upsert_events([a])
 
         b["content_hash"] = "different"
+        b["identity_key"] = database._identity_key(b)
         with database.get_connection() as conn:
             conn.execute(
                 """INSERT INTO events
