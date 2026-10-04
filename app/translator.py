@@ -63,9 +63,20 @@ def normalize_event_title(title: str) -> str:
     value = value.strip(" -–—|•·")
     value = re.sub(r"([!?.,:;]){2,}", r"\1", value)
 
-    # Some aggregators incorrectly expose the first part of the description
-    # as the event name. Keep legitimate titles intact, but cut obvious
-    # sentence-like catalogue blobs at the first sentence boundary.
+    # Some aggregators append the description directly to the title without
+    # punctuation. Cut common description lead-ins before doing dedupe.
+    value = re.split(
+        r"\s+(?=(?:Это\s+|В\s+программе\b|Группа\s+|Португальский\s+артист\b|"
+        r"Vienna\s+Schoenbrunn\s+Palace\s+Orchestra\b|"
+        r"Два\s+вечера\b|На\s+сцене\s+|Гостей\s+жд[её]т\s+|"
+        r"В\s+составе\s+дуэта\b))",
+        value,
+        maxsplit=1,
+        flags=re.I,
+    )[0].strip()
+
+    # If a long title is actually a sentence-like description, keep its first
+    # sentence rather than polluting the event catalogue.
     if len(value) > 120:
         sentence = re.split(r"(?<=[.!?])\s+", value, maxsplit=1)[0].strip()
         if 8 <= len(sentence) <= 120:
