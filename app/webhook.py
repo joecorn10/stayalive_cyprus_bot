@@ -51,6 +51,14 @@ def configure_webhook() -> None:
         payload["secret_token"] = WEBHOOK_SECRET
 
     try:
+        # Telegram may keep a valid webhook URL while delivery becomes stale
+        # after a runtime restart. Reset it on boot without dropping updates.
+        current = api_call(TOKEN, "getWebhookInfo", {}).get("result", {})
+        current_url = (current.get("url") or "").strip()
+        if current_url == url:
+            api_call(TOKEN, "deleteWebhook", {"drop_pending_updates": False})
+            print("Telegram webhook reset before re-registration; pending updates preserved.")
+
         result = api_call(TOKEN, "setWebhook", payload)
         print(f"Telegram webhook configured: {url} result={result}")
         try:
