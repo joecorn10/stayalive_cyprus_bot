@@ -45,7 +45,7 @@ def configure_webhook() -> None:
     payload = {
         "url": url,
         "drop_pending_updates": False,
-        "allowed_updates": ["message", "callback_query"],
+        "allowed_updates": [],
     }
     if WEBHOOK_SECRET:
         payload["secret_token"] = WEBHOOK_SECRET
