@@ -185,6 +185,31 @@ def poll_once(token: str) -> bool:
     if not updates:
         return False
 
+    # Confirm the received batch on Telegram immediately, before doing any
+    # slow event/source work. Persisting the offset only to the runner disk is
+    # not enough: a new GitHub runner can start from the last committed offset
+    # and Telegram would then redeliver the same updates.
+    #
+    # A zero-timeout getUpdates with the next offset is the actual Telegram-side
+    # acknowledgement. If newer updates arrived in the meantime, keep them and
+    # process them in the same worker instead of dropping them.
+    claim_offset = updates[-1]["update_id"] + 1
+    claimed = api_call(
+        token,
+        "getUpdates",
+        {
+            "offset": claim_offset,
+            "timeout": 0,
+            "allowed_updates": ["message", "callback_query"],
+        },
+    ).get("result", [])
+    if claimed:
+        print(
+            "Telegram claim: received "
+            f"{len(claimed)} newer update(s) while confirming batch"
+        )
+        updates.extend(claimed)
+
     for update in updates:
         update_offset = update["update_id"] + 1
         chat_id = None
