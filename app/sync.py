@@ -99,7 +99,7 @@ CATEGORY_RULES = (
     ("🎵 Музыка", re.compile(r"\b(concert|live|music|dj|djs|band|gig|singer|pianist|музык|концерт|диджей|ди-джей|группа|певец|джаз|techno|house)\b", re.I)),
     ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|дегустац|вино|ужин|еда|шеф|ресторан|вин|гастроном)\b", re.I)),
     ("🎨 Искусство", re.compile(r"\b(art|gallery|exhibition|opening|museum|painting|sculpture|искусств|выстав|галере|музе|живопис|скульптур|фото)\b", re.I)),
-    ("🪩 Nightlife", re.compile(r"\b(party|club|night|rave|disco|nightlife|вечерин|клуб|рейв|ночь|танц)\b", re.I)),
+    ("🪩 Nightlife", re.compile(r"\b(party|club|rave|disco|nightlife|вечерин|клуб|рейв|ночь|танц)\b", re.I)),
     ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|театр|кино|фильм|показ|спектакл)\b", re.I)),
     ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|masterclass|class|seminar|lecture|course|мастер[- ]?класс|воркшоп|семинар|лекци|курс|занят)\b", re.I)),
     ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|йог|фитнес|футбол|баскетбол|велопрогул|спорт)\b", re.I)),
