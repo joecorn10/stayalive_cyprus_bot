@@ -344,25 +344,23 @@ def _display_title_tokens(title: str) -> set[str]:
 
 def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
     from difflib import SequenceMatcher
+    import re
 
     if a["date"] != b["date"]:
         return False
 
-    # Exact title/date copies are duplicates even if older rows were
-    # classified differently by another source or by older category rules.
-    import re
-    title_a = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(a["title"]).lower(), flags=re.I).split())
-    title_b = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(b["title"]).lower(), flags=re.I).split())
-    if title_a and title_a == title_b:
-        time_a = str(a["time"] or "").strip().lower()
-        time_b = str(b["time"] or "").strip().lower()
-        venue_a = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(a["venue"] or "").lower(), flags=re.I).split())
-        venue_b = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(b["venue"] or "").lower(), flags=re.I).split())
-        if (not time_a or not time_b or time_a == time_b) and (not venue_a or not venue_b or venue_a == venue_b):
-            return True
+    def normalize(value):
+        return " ".join(
+            re.sub(r"[^a-z0-9а-яё]+", " ", str(value or "").lower(), flags=re.I).split()
+        )
 
-    if (a["category"] or "") != (b["category"] or ""):
-        return False
+    # Missing venue/time in one source should not prevent a match, but
+    # conflicting values are a strong signal that these are different events.
+    for field in ("time", "venue", "city"):
+        left_value = normalize(a[field])
+        right_value = normalize(b[field])
+        if left_value and right_value and left_value != right_value:
+            return False
 
     left = _display_title_tokens(a["title"])
     right = _display_title_tokens(b["title"])
@@ -376,9 +374,9 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
         " ".join(sorted(right)),
     ).ratio()
 
-    # Catch syndicated copies whose wording differs slightly while keeping
-    # genuinely different same-day events separate.
-    return overlap >= 0.5 or similarity >= 0.72
+    # Category is intentionally ignored: classification can differ between
+    # sources and should never create two cards for the same event.
+    return overlap >= 0.67 or similarity >= 0.84
 
 
 def deduplicate_exact_events() -> int:
