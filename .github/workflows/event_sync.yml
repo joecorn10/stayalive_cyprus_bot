@@ -2,7 +2,7 @@ name: Event sync
 
 on:
   schedule:
-    - cron: "2/10 * * * *"
+    - cron: "2-59/10 * * * *"
   workflow_dispatch:
 
 permissions:
