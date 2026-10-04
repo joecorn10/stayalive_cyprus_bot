@@ -381,6 +381,57 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
     return overlap >= 0.5 or similarity >= 0.72
 
 
+def deduplicate_exact_events() -> int:
+    """Merge exact cross-source copies while preserving source provenance."""
+    import re
+
+    def key(row):
+        title = " ".join(
+            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["title"] or "").lower(), flags=re.I).split()
+        )
+        venue = " ".join(
+            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["venue"] or "").lower(), flags=re.I).split()
+        )
+        city = " ".join(
+            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["city"] or "").lower(), flags=re.I).split()
+        )
+        return (
+            title,
+            row["date"],
+            str(row["time"] or "").strip().lower(),
+            venue,
+            city,
+        )
+
+    removed = 0
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM events ORDER BY id").fetchall()
+        keepers = {}
+
+        for row in rows:
+            event_key = key(row)
+            keeper_id = keepers.get(event_key)
+            if keeper_id is None:
+                keepers[event_key] = row["id"]
+                continue
+
+            # Preserve every source attached to the duplicate before removing it.
+            conn.execute(
+                """INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url)
+                   SELECT ?, source_id, source_url
+                   FROM event_sources
+                   WHERE event_id = ?""",
+                (keeper_id, row["id"]),
+            )
+            conn.execute("DELETE FROM event_sources WHERE event_id = ?", (row["id"],))
+            conn.execute("DELETE FROM events WHERE id = ?", (row["id"],))
+            removed += 1
+
+        conn.commit()
+
+    return removed
+
+
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     init_db()
     with get_connection() as conn:
