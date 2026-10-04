@@ -71,6 +71,26 @@ def normalize_event_title(title: str) -> str:
         if 8 <= len(sentence) <= 120:
             value = sentence
 
+    # Remove obvious description/metadata tails that have leaked into titles.
+    value = re.split(
+        r"\s+(?=(?:Location|Tickets?|Register|Registration|More info|Info|Price|"
+        r"We meet|Bring|Doors?\s+open|Это|Группа|В программе|Гостей\s+жд|"
+        r"Два\s+вечера|В\s+составе|Зарегистрироваться|Получить\s+стартовый\s+пакет)\b)",
+        value,
+        maxsplit=1,
+        flags=re.I,
+    )[0].strip()
+
+    # A caption that begins with instructions is not a useful event title.
+    if re.match(
+        r"^(?:Принесите|Зарегистрироваться|Получить\s+стартовый|"
+        r"Location\s*:|Tickets?\s*:|Register\b|Registration\b|"
+        r"We\s+meet\b|Bring\s+your\b)",
+        value,
+        re.I,
+    ):
+        return "Event"
+
     # Normalize separators so equivalent titles from different sources hash
     # to the same event identity.
     value = re.sub(r"\s*[|]\s*", " — ", value)
