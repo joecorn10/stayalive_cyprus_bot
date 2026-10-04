@@ -14,6 +14,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import requests
+import threading
 from bs4 import BeautifulSoup
 
 from app.date_utils import parse_event_dates
@@ -23,11 +24,14 @@ logger = logging.getLogger(__name__)
 
 PROFILE_TIMEOUT = 15
 MAX_POSTS = 30
+APIFY_CONCURRENCY = threading.Semaphore(3)
 
 EVENT_WORDS = re.compile(
-    r"\b(event|events|party|concert|live|dj|djs|wine|tasting|dinner|"
-    r"market|workshop|exhibition|opening|festival|night|brunch|popup|"
-    r"дегустац|концерт|вечерин|фестивал|маркет|выстав|ужин|"
+    r"\b(event|events|party|parties|club|rave|disco|concert|live|dj|djs|"
+    r"techno|house|trance|drum.?n.?bass|dnb|electro|wine|tasting|dinner|"
+    r"market|workshop|exhibition|opening|festival|night|lineup|doors?|"
+    r"brunch|popup|пати|вечерин\w*|клуб\w*|рейв|дискотек|концерт|"
+    r"диджей|техно|хаус|транс|дегустац|фестивал|маркет|выстав|ужин|"
     r"мастер[- ]?класс|событи)\b",
     re.I,
 )
@@ -205,13 +209,14 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
     payload = {"usernames": [username]}
 
     try:
-        response = requests.post(
-            endpoint,
-            params={"token": token},
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=120,
-        )
+        with APIFY_CONCURRENCY:
+            response = requests.post(
+                endpoint,
+                params={"token": token},
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=120,
+            )
         if not 200 <= response.status_code < 300:
             logger.warning(
                 "Apify Instagram scraper returned HTTP %s for @%s: %s",
