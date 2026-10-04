@@ -247,7 +247,9 @@ def sync_all() -> int:
         for future in as_completed(futures):
             name = futures[future]
             try:
-                parsed.append((name, _normalize(future.result())))
+                events = _normalize(future.result())
+                print(f"SOURCE_RESULT | {name} | {len(events)} events")
+                parsed.append((name, events))
             except Exception:
                 logger.exception("%s sync failed", name)
 
