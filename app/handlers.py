@@ -250,6 +250,37 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
     data = (callback.get("data") or "").strip()
     message = callback.get("message") or {}
     chat_id = (message.get("chat") or {}).get("id")
+    if data.startswith("main:"):
+        action = data.split(":", 1)[1]
+        if action == "menu":
+            return chat_id, WELCOME_TEXT, main_menu()
+        if action == "today":
+            set_chat_state(chat_id, "idle")
+            try:
+                sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+            except Exception as exc:
+                print(f"Stantar Kkomety refresh failed: {exc}")
+            today = cyprus_today()
+            text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()), display_date=today)
+            return chat_id, text, keyboard or main_menu()
+        if action == "week":
+            set_chat_state(chat_id, "idle")
+            try:
+                sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+            except Exception as exc:
+                print(f"Stantar Kkomety refresh failed: {exc}")
+            today = cyprus_today()
+            end = today + timedelta(days=6)
+            text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
+            return chat_id, text, keyboard or main_menu()
+        if action == "sources":
+            set_chat_state(chat_id, "idle")
+            return chat_id, format_sources(), main_menu()
+        if action == "add":
+            set_chat_state(chat_id, "awaiting_source")
+            return chat_id, ("➕ Добавить источник\n\nОтправь URL. Если хочешь, добавь комментарий на следующей строке."), main_menu("Вставь ссылку на источник…")
+        return chat_id, "Неизвестное действие.", main_menu()
+
     if data.startswith("categories:"):
         period = data.split(":", 1)[1]
         today = cyprus_today()
