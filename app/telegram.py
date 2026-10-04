@@ -180,17 +180,34 @@ def poll_once(token: str) -> bool:
                         f"text_len={len(reply_text or '')}"
                     )
                     if reply_chat_id is not None:
-                        sent_id = send_message(
-                            token,
-                            reply_chat_id,
-                            reply_text,
-                            keyboard,
-                            parse_mode="HTML",
-                        )
-                        print(
-                            f"Telegram callback response sent: chat_id={reply_chat_id} "
-                            f"message_id={sent_id}"
-                        )
+                        # Navigation callbacks replace the current bot message.
+                        # This keeps Today/Week/categories/events as one clean view
+                        # instead of creating a second message on every click.
+                        if message_id is not None and reply_chat_id == chat_id:
+                            edit_message(
+                                token,
+                                reply_chat_id,
+                                message_id,
+                                reply_text,
+                                keyboard,
+                                parse_mode="HTML",
+                            )
+                            print(
+                                f"Telegram callback message edited: chat_id={reply_chat_id} "
+                                f"message_id={message_id}"
+                            )
+                        else:
+                            sent_id = send_message(
+                                token,
+                                reply_chat_id,
+                                reply_text,
+                                keyboard,
+                                parse_mode="HTML",
+                            )
+                            print(
+                                f"Telegram callback response sent: chat_id={reply_chat_id} "
+                                f"message_id={sent_id}"
+                            )
                 except Exception as exc:
                     print(f"Telegram callback failed for data={data!r}: {exc}", file=sys.stderr)
                     try:
