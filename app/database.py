@@ -348,6 +348,19 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
     if a["date"] != b["date"]:
         return False
 
+    # Exact title/date copies are duplicates even if older rows were
+    # classified differently by another source or by older category rules.
+    import re
+    title_a = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(a["title"]).lower(), flags=re.I).split())
+    title_b = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(b["title"]).lower(), flags=re.I).split())
+    if title_a and title_a == title_b:
+        time_a = str(a["time"] or "").strip().lower()
+        time_b = str(b["time"] or "").strip().lower()
+        venue_a = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(a["venue"] or "").lower(), flags=re.I).split())
+        venue_b = " ".join(re.sub(r"[^a-z0-9а-яё]+", " ", str(b["venue"] or "").lower(), flags=re.I).split())
+        if (not time_a or not time_b or time_a == time_b) and (not venue_a or not venue_b or venue_a == venue_b):
+            return True
+
     if (a["category"] or "") != (b["category"] or ""):
         return False
 
