@@ -1,4 +1,4 @@
-"""Lightweight event text translation to Russian."""
+""""Lightweight event text translation to Russian."""
 
 import re
 import logging
@@ -66,9 +66,8 @@ def normalize_event_title(title: str) -> str:
 
 
 def translate_event(event: dict) -> dict:
-    # Keep venue/city names untouched. Translate human-facing event text.
-    translated_title = translate_to_russian(event.get("title", ""), max_chars=300)
-    event["title"] = normalize_event_title(translated_title)
+    # Keep event titles, venue names, city names and brands in their original form.
+    event["title"] = normalize_event_title(event.get("title", ""))
     if event.get("description"):
         event["description"] = translate_to_russian(
             event["description"], max_chars=5000
