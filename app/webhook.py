@@ -80,13 +80,16 @@ def _process_update(update: dict) -> None:
         callback = update.get("callback_query")
         if callback:
             callback_id = callback.get("id")
+            callback_data = (callback.get("data") or "").strip()
             if callback_id:
                 try:
-                    api_call(
-                        TOKEN,
-                        "answerCallbackQuery",
-                        {"callback_query_id": callback_id},
-                    )
+                    callback_notice = None
+                    if callback_data in ("main:today", "main:week"):
+                        callback_notice = "⏳ Загружаю результаты…"
+                    payload = {"callback_query_id": callback_id}
+                    if callback_notice:
+                        payload["text"] = callback_notice
+                    api_call(TOKEN, "answerCallbackQuery", payload)
                 except Exception as exc:
                     print(f"Telegram callback acknowledgement failed: {exc}")
 
