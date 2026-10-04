@@ -6,7 +6,7 @@ individual event pages using the generic JSON-LD event parser.
 
 import logging
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -26,6 +26,8 @@ LINK_PATTERNS = {
     "Cyprus.BZ": re.compile(r"^https?://(?:www\.)?cyprus\.bz/(?:ru/)?events?/[^?#]+", re.I),
     "More.com": re.compile(r"^https?://(?:www\.)?more\.com/cy-(?:en|el)/tickets/[^?#]+", re.I),
 }
+
+MAX_PAGES = 10
 
 
 class AggregatorParser(EventParser):
@@ -135,6 +137,8 @@ class AggregatorParser(EventParser):
             flush=True,
         )
         return unique
+
+
 def _discovery_urls(url: str, source_name: str) -> tuple[str, ...]:
     base = url.rstrip("/")
     if source_name == "Cyprus.BZ":
