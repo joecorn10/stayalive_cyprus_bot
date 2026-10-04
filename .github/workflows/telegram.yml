@@ -1,10 +1,6 @@
 name: Telegram bot
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - ".github/workflows/telegram.yml"
   workflow_dispatch:
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
@@ -41,7 +37,7 @@ jobs:
         run: |
           python -c "from app.database import list_sources; [(print(f\"SOURCE | {s['name']} | {s['type']} | enabled={s['enabled']} | {s['url']}\")) for s in list_sources()]"
 
-      - name: Sync events
+      - name: Run Telegram worker
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.telegram_worker
