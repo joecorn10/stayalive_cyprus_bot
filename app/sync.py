@@ -216,6 +216,10 @@ def classify_event(event: dict) -> list[str]:
 
 def _event_categories(event: dict) -> list[str]:
     """Read multi-category data with backward compatibility for old rows."""
+    # SQLite returns sqlite3.Row objects from list_events(); normalize them
+    # here so category rendering works for both rows and plain dictionaries.
+    if not hasattr(event, "get"):
+        event = dict(event)
     raw = event.get("categories", "")
     if raw:
         try:
