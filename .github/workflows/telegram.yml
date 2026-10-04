@@ -5,7 +5,7 @@ on:
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
     # dependency installation and state persistence.
-    - cron: "3/10 * * * *"
+    - cron: "7/10 * * * *"
 
 permissions:
   contents: write
@@ -32,22 +32,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Debug event sources
-        run: |
-          python -c "from app.database import list_sources; [(print(f\"SOURCE | {s['name']} | {s['type']} | enabled={s['enabled']} | {s['url']}\")) for s in list_sources()]"
-
-      - name: Run Telegram worker
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
-        run: python -m app.telegram_worker
-
       - name: Sync events
-        if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
         run: |
           python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
+
+      - name: Run Telegram worker
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
+        run: python -m app.telegram_worker
 
       - name: Save database and Telegram offset
         if: always()
