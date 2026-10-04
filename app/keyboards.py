@@ -20,10 +20,10 @@ def category_slug(category: str) -> str:
     return mapping.get(category, "other")
 
 def category_keyboard(categories: list[tuple[str, int]], period: str) -> dict:
-    return {"inline_keyboard": [[{"text": f"{category} · {count}", "callback_data": f"category:{period}:{category_slug(category)}"}] for category, count in categories] + [[{"text": "← Главное меню", "callback_data": "main:menu"}]]}
+    return {"inline_keyboard": [[{"text": f"{category} · {count}", "callback_data": f"category:{period}:{category_slug(category)}"}] for category, count in categories]}
 
 def event_keyboard(events: list, period: str, category: str) -> dict:
-    return {"inline_keyboard": [[{"text": str(event["title"])[:60], "callback_data": f"event:{event['id']}"}] for event in events] + [[{"text": "← Все направления", "callback_data": f"categories:{period}"}], [{"text": "← Главное меню", "callback_data": "main:menu"}]]}
+    return {"inline_keyboard": [[{"text": str(event["title"])[:60], "callback_data": f"event:{event['id']}"}] for event in events] + [[{"text": "← Все направления", "callback_data": f"categories:{period}"}]]}
 
 def back_keyboard(period: str) -> dict:
-    return {"inline_keyboard": [[{"text": "← Все направления", "callback_data": f"categories:{period}"}], [{"text": "← Главное меню", "callback_data": "main:menu"}]]}
+    return {"inline_keyboard": [[{"text": "← Все направления", "callback_data": f"categories:{period}"}]]}
