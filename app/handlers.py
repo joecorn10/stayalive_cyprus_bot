@@ -12,6 +12,7 @@ from app.database import (
     init_db,
     get_event,
     list_events,
+    list_events_for_period,
     list_event_sources,
     list_recent_events,
     list_sources,
@@ -305,7 +306,7 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         period = data.split(":", 1)[1]
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
-        events = list_events(today.isoformat(), end.isoformat())
+        events = list_events_for_period(today.isoformat(), end.isoformat())
         title = "📅 Сегодня" if period == "today" else "🗓 На этой неделе"
         return chat_id, *format_events(title, events, display_date=today if period == "today" else None)
 
@@ -359,7 +360,7 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
             print(f"Telegram category reclassification failed: {exc}")
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
-        events = list_events(today.isoformat(), end.isoformat())
+        events = list_events_for_period(today.isoformat(), end.isoformat(), category)
         return chat_id, *format_category_events(category, events, period)
 
     if not data.startswith("event:"):
