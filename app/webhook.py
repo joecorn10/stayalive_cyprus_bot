@@ -1,21 +1,24 @@
-"""Persistent Telegram webhook service for Stay Alive Cyprus."""
+"""Persistent Telegram webhook service for Stay Alive Cyprus.
+
+The Render webhook is the single Telegram update consumer. GitHub Actions does
+not poll Telegram while this webhook is active.
+"""
 
 import os
 import threading
-from datetime import timedelta
 
 from flask import Flask, jsonify, request
 
-from app.database import list_events
-from app.handlers import (
-    _event_active_on,
-    cyprus_today,
-    format_events,
-    handle_callback,
-    handle_message,
+from app.handlers import handle_callback, handle_message
+from app.telegram import (
+    api_call,
+    edit_message,
+    send_message,
+    send_navigation_message,
 )
+from app.database import get_chat_state
+from app.source_detector import normalize_url
 from app.sync import sync_source_by_url
-from app.telegram import api_call, edit_message, send_message
 
 app = Flask(__name__)
 
@@ -39,7 +42,11 @@ def configure_webhook() -> None:
         return
 
     url = f"{base_url}{_webhook_path()}"
-    payload = {"url": url, "drop_pending_updates": False}
+    payload = {
+        "url": url,
+        "drop_pending_updates": False,
+        "allowed_updates": ["message", "callback_query"],
+    }
     if WEBHOOK_SECRET:
         payload["secret_token"] = WEBHOOK_SECRET
 
@@ -56,99 +63,62 @@ def _valid_request() -> bool:
     return request.headers.get("X-Telegram-Bot-Api-Secret-Token", "") == WEBHOOK_SECRET
 
 
-def _cached_event_reply(text: str):
-    """Build an answer from SQLite without touching slow external sources."""
-    today = cyprus_today()
-    if text == "📅 Сегодня":
-        # Build Today from the same weekly snapshot used by Week, then
-        # filter locally. This also handles multi-day events correctly.
-        week_end = today + timedelta(days=6)
-        events = list_events(today.isoformat(), week_end.isoformat())
-        today_events = [event for event in events if _event_active_on(event, today)]
-        return format_events("📅 Сегодня", today_events, display_date=today)
-    end = today + timedelta(days=6)
-    events = list_events(today.isoformat(), end.isoformat())
-    return format_events("🗓 На этой неделе", events)
-
-
-def _refresh_and_update(chat_id: int, text: str, progress_message_id: int | None) -> None:
-    """Refresh the live source in the background, then update the visible result."""
-    try:
-        print(f"Telegram background refresh started: {text!r}")
-        sync_source_by_url(STANTAR_URL)
-        reply_text, keyboard = _cached_event_reply(text)
-        print(f"Telegram background refresh finished: {text!r}")
-
-        if progress_message_id is not None:
-            try:
-                edit_message(
-                    TOKEN,
-                    chat_id,
-                    progress_message_id,
-                    reply_text,
-                    keyboard,
-                    parse_mode=None,
-                )
-                print(
-                    f"Telegram background result updated: chat_id={chat_id} "
-                    f"message_id={progress_message_id}"
-                )
-                return
-            except Exception as exc:
-                print(f"Telegram background edit failed: {exc}")
-
-        send_message(TOKEN, chat_id, reply_text, keyboard, parse_mode=None)
-    except Exception as exc:
-        print(f"Telegram background refresh failed: {exc}")
-        if progress_message_id is not None:
-            try:
-                reply_text, keyboard = _cached_event_reply(text)
-                edit_message(
-                    TOKEN,
-                    chat_id,
-                    progress_message_id,
-                    reply_text,
-                    keyboard,
-                    parse_mode=None,
-                )
-            except Exception as fallback_exc:
-                print(f"Telegram cached fallback failed: {fallback_exc}")
-
-
 def _process_update(update: dict) -> None:
+    """Process exactly one Telegram update and produce at most one visible reply."""
     try:
-        if "callback_query" in update:
-            callback = update["callback_query"]
+        callback = update.get("callback_query")
+        if callback:
             callback_id = callback.get("id")
             if callback_id:
                 try:
-                    api_call(TOKEN, "answerCallbackQuery", {"callback_query_id": callback_id})
+                    api_call(
+                        TOKEN,
+                        "answerCallbackQuery",
+                        {"callback_query_id": callback_id},
+                    )
                 except Exception as exc:
                     print(f"Telegram callback acknowledgement failed: {exc}")
 
             chat_id, reply_text, keyboard = handle_callback(callback)
-            if chat_id is not None:
-                message = callback.get("message") or {}
-                message_id = message.get("message_id")
-                if message_id:
-                    try:
-                        edit_message(
-                            TOKEN,
-                            chat_id,
-                            message_id,
-                            reply_text,
-                            keyboard,
-                            parse_mode="HTML",
-                        )
-                    except Exception as exc:
-                        print(f"Telegram callback edit failed: {exc}")
-                        send_message(
-                            TOKEN,
-                            chat_id,
-                            reply_text,
-                            keyboard,
-                            parse_mode="HTML",
-                        )
+            if chat_id is None:
+                return
+
+            message = callback.get("message") or {}
+            message_id = message.get("message_id")
+            if message_id:
+                try:
+                    # Inline navigation edits the message that was clicked.
+                    # No second visible message is created.
+                    edit_message(
+                        TOKEN,
+                        chat_id,
+                        message_id,
+                        reply_text,
+                        keyboard,
+                        parse_mode="HTML",
+                    )
+                    print(
+                        "Telegram webhook callback edited: "
+                        f"chat_id={chat_id} message_id={message_id} "
+                        f"data={(callback.get('data') or '').strip()!r}"
+                    )
+                except Exception as exc:
+                    print(f"Telegram callback edit failed: {exc}")
+                    send_message(
+                        TOKEN,
+                        chat_id,
+                        reply_text,
+                        keyboard,
+                        parse_mode="HTML",
+                    )
+            else:
+                send_message(
+                    TOKEN,
+                    chat_id,
+                    reply_text,
+                    keyboard,
+                    parse_mode="HTML",
+                )
             return
 
         message = update.get("message")
@@ -156,57 +126,78 @@ def _process_update(update: dict) -> None:
             return
 
         chat_id = (message.get("chat") or {}).get("id")
-        text = (message.get("text") or "").strip()
         if chat_id is None:
             return
 
-        needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
+        text = (message.get("text") or "").strip()
+        print(
+            "Telegram webhook message: "
+            f"update_id={update.get('update_id')} chat_id={chat_id} text={text!r}"
+        )
 
-        if needs_sync:
-            # Never block the user-visible response on an external parser.
-            # First show the current SQLite snapshot, then refresh Stantar in
-            # a background thread and replace the message when it finishes.
+        awaiting_source = get_chat_state(chat_id) == "awaiting_source"
+        source_url = normalize_url(text) if awaiting_source else ""
+
+        # handle_message contains the existing command/menu logic and, for
+        # Today/Week, refreshes Stantar before returning the final snapshot.
+        # The webhook itself is already running off the HTTP request thread, so
+        # this does not block Telegram's webhook acknowledgement.
+        reply_text, keyboard = handle_message(message)
+
+        if awaiting_source and source_url:
+            # Preserve the existing "check this source now" behavior, but keep
+            # it to one visible message: send one temporary message and edit it
+            # into the final result.
+            check_message_id = send_navigation_message(
+                TOKEN,
+                chat_id,
+                "🔎 Источник добавлен. Проверяю его прямо сейчас…",
+                parse_mode=None,
+            )
             try:
-                progress_message_id = send_message(
-                    TOKEN,
-                    chat_id,
-                    "🔎 Обновляю события…\n\nПроверяю свежие данные и сразу покажу результат.",
-                    parse_mode=None,
+                synced = sync_source_by_url(source_url)
+                print(f"Telegram targeted source sync: {synced} new events")
+                reply_text += f"\\n\\n🔎 Проверка завершена: новых событий — {synced}."
+            except Exception as sync_exc:
+                print(
+                    f"Telegram targeted source sync failed: {sync_exc}",
                 )
-            except Exception as exc:
-                print(f"Telegram progress message failed: {exc}")
-                progress_message_id = None
+                reply_text += (
+                    "\\n\\n⚠️ Источник добавлен, но проверить его сейчас не удалось. "
+                    "Повторю при следующей синхронизации."
+                )
 
-            cached_text, cached_keyboard = _cached_event_reply(text)
-
-            if progress_message_id is not None:
+            if check_message_id is not None:
                 try:
                     edit_message(
                         TOKEN,
                         chat_id,
-                        progress_message_id,
-                        cached_text,
-                        cached_keyboard,
+                        check_message_id,
+                        reply_text,
+                        keyboard,
                         parse_mode=None,
                     )
                 except Exception as exc:
-                    print(f"Telegram cached result edit failed: {exc}")
-                    send_message(TOKEN, chat_id, cached_text, cached_keyboard, parse_mode=None)
-            else:
-                send_message(TOKEN, chat_id, cached_text, cached_keyboard, parse_mode=None)
-
-            threading.Thread(
-                target=_refresh_and_update,
-                args=(chat_id, text, progress_message_id),
-                daemon=True,
-            ).start()
+                    print(f"Telegram source-sync edit failed: {exc}")
             return
 
-        reply_text, keyboard = handle_message(message)
-        send_message(TOKEN, chat_id, reply_text, keyboard)
+        # This also removes the legacy ReplyKeyboard in the same visible
+        # message flow. From this point onward navigation is inline-only.
+        sent_id = send_navigation_message(
+            TOKEN,
+            chat_id,
+            reply_text,
+            keyboard,
+        )
+        print(
+            f"Telegram webhook response sent: chat_id={chat_id} message_id={sent_id}"
+        )
 
     except Exception as exc:
-        print(f"Telegram webhook update failed: {exc}")
+        print(
+            f"Telegram webhook update failed: "
+            f"update_id={update.get('update_id')} error={exc}"
+        )
         message = update.get("message") or {}
         chat_id = (message.get("chat") or {}).get("id")
         if chat_id is not None:
@@ -235,8 +226,8 @@ def telegram_webhook():
     if not update:
         return jsonify({"ok": False, "error": "empty update"}), 400
 
-    # Return 200 immediately so Telegram never waits for event syncing/parsing.
-    # The actual handler runs in a short-lived background thread.
+    # Acknowledge Telegram immediately. The actual work happens in one
+    # short-lived background thread per update.
     threading.Thread(
         target=_process_update,
         args=(update,),
