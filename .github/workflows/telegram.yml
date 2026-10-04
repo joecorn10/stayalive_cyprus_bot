@@ -77,3 +77,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: persist bot state"
           git push origin HEAD:main
+
+# Force worker refresh after catalog persistence.
