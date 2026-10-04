@@ -741,9 +741,15 @@ def upsert_events(events: list[dict]) -> int:
                     parsed_categories.insert(0, merged_category)
                 merged_categories = json.dumps(list(dict.fromkeys(parsed_categories)), ensure_ascii=False)
 
+            merged_description = str(event.get("description", "") or "").strip()
+            if match:
+                previous_description = str(match["description"] or "").strip()
+                if len(previous_description) > len(merged_description):
+                    merged_description = previous_description
+
             values = (
                 event.get("title", ""),
-                event.get("description", ""),
+                merged_description,
                 merged_category,
                 merged_categories,
                 event.get("date", ""),
