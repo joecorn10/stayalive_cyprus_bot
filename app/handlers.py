@@ -17,7 +17,7 @@ from app.database import (
     list_sources,
     set_chat_state,
 )
-from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu
+from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
 from app.sync import canonical_category, sync_source_by_url
 
@@ -184,7 +184,14 @@ def format_event_details(event) -> tuple[str, dict | None]:
 
     keyboard = None
     if event["ticket_url"]:
-        keyboard = {"inline_keyboard": [[{"text": "🎟 Билеты / источник", "url": event["ticket_url"]}]]}
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🎟 Билеты / источник", "url": event["ticket_url"]}],
+                *navigation_keyboard()["inline_keyboard"],
+            ]
+        }
+    else:
+        keyboard = navigation_keyboard()
     return "\n".join(lines), keyboard
 
 
