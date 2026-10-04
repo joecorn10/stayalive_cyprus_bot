@@ -125,6 +125,40 @@ def main():
                         f"{norm(row['venue'])} | {norm(row['city'])} | {row['title']}"
                     )
 
+    # Compare stored categories with a fresh classifier pass for TODAY only.
+    # This tells us whether the bot's "Nightlife · 2" is a real catalogue
+    # count or a missed-classification problem.
+    from datetime import date
+    from app.sync import classify_event, _event_categories
+
+    today = date.today().isoformat()
+    today_rows = [
+        row for row in rows
+        if str(row["date"]) <= today <= str(row["end_date"] or row["date"])
+    ]
+    today_counts = Counter(
+        category
+        for row in today_rows
+        for category in _event_categories(row)
+    )
+    print("TODAY_EVENT_COUNT", len(today_rows))
+    print("TODAY_CATEGORY_COUNTS", dict(today_counts))
+    print("TODAY_CLASSIFIER_MISSES")
+    misses = 0
+    for row in today_rows:
+        predicted = classify_event(dict(row))
+        stored = set(_event_categories(row))
+        if "🪩 Nightlife" in predicted and "🪩 Nightlife" not in stored:
+            misses += 1
+            print(
+                f"TODAY_NIGHTLIFE_MISS | id={row['id']} | "
+                f"stored={','.join(sorted(stored))} | "
+                f"predicted={','.join(predicted)} | "
+                f"source={row['source_url']} | title={row['title']} | "
+                f"description={row['description']} | venue={row['venue']}"
+            )
+    print("TODAY_CLASSIFIER_MISS_COUNT", misses)
+
     identity_groups = defaultdict(list)
     for row in rows:
         identity = str(row["identity_key"] or "").strip()
