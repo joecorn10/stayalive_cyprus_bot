@@ -121,3 +121,39 @@ def test_title_category_beats_noisy_description():
     assert classify_event(picnic) == "🏃 Спорт и outdoor"
     assert classify_event(theatre) == "🎭 Театр и кино"
     assert classify_event(party) == "🪩 Nightlife"
+
+
+def test_semantic_dedupe_ignores_venue_formatting_when_title_is_exact():
+    with tempfile.TemporaryDirectory() as tmp:
+        database.DATABASE_PATH = Path(tmp) / "events.db"
+        database.init_db()
+
+        a = _event(
+            "Фестиваль древних оливковых деревьев в деревне Парамали",
+            time="08:00",
+            venue="Cyprus",
+            city="Cyprus",
+        )
+        b = _event(
+            "Фестиваль древних оливковых деревьев в деревне Парамали",
+            time="08:00",
+            venue="Village Square Paramali",
+            city="Cyprus",
+        )
+        database.upsert_events([a])
+        b["content_hash"] = "different"
+        with database.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO events
+                   (title, description, category, date, end_date, time, venue, city,
+                    price, ticket_url, source_url, image_url, content_hash, identity_key)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                tuple(b[k] for k in (
+                    "title", "description", "category", "date", "end_date", "time",
+                    "venue", "city", "price", "ticket_url", "source_url", "image_url",
+                    "content_hash", "identity_key",
+                )),
+            )
+            conn.commit()
+
+        assert database.deduplicate_events() == 1
