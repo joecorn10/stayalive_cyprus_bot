@@ -438,9 +438,9 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
 
         if city and row_city and city != row_city:
             continue
-        if venue and row_venue and venue != row_venue:
-            continue
-        if time and row_time and time != row_time:
+        venue_conflict = bool(venue and row_venue and venue != row_venue)
+        time_conflict = bool(time and row_time and time != row_time)
+        if time_conflict:
             continue
 
         intersection = len(title_tokens & other_tokens)
@@ -452,6 +452,14 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
             _identity_text(event.get("title", "")),
             _identity_text(row["title"]),
         ).ratio()
+
+        # A near-identical title on the same date/time/city is stronger
+        # evidence than a venue string that differs between sources. This
+        # catches cases like "Cyprus" vs "Village Square Paramali" for the
+        # same festival and "Gymnasio Soleas" vs "Solea Gymnasium Evrychou".
+        strong_title_match = overlap >= 0.95 or sequence >= 0.96
+        if venue_conflict and not strong_title_match:
+            continue
 
         other_description_tokens = _identity_tokens(row["description"])
         description_overlap = 0.0
