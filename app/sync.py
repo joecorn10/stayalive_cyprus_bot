@@ -110,7 +110,7 @@ CATEGORY_RULES = (
     ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
     ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|children|family|families|дет\w*|семейн|для детей)\b", re.I)),
     ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|театр|кино|фильм|показ|спектакл)\b", re.I)),
-    ("🪩 Nightlife", re.compile(r"\b(party|club|rave|disco|nightlife|вечерин\w*|клуб\w*|рейв|дискотек|ночн\w*|танц\w*)\b", re.I)),
+    ("🪩 Nightlife", re.compile(r"\b(party|club|club night|rave|disco|nightlife|dj|dj set|techno|hard techno|house music|deep house|tech house|afro house|melodic house|progressive house|psytrance|psy trance|trance|drum.?n.?bass|dnb|electro|electronica|electronic music|indiedance|nu disco|downtempo|dancefloor|dance floor|all night long|вечерин\w*|клуб\w*|рейв|дискотек|ночн\w*|танц\w*)\b", re.I)),
     ("🎵 Музыка", re.compile(r"\b(concert|live music|music|band|gig|singer|pianist|concerts|музык\w*|концерт\w*|диджей|ди-джей|группа|певец|джаз|джем|jazz|blues)\b", re.I)),
 )
 
