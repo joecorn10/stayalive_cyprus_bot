@@ -41,25 +41,28 @@ jobs:
         run: python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
 
       - name: Save database
+        if: always()
         run: |
           if [ ! -f events.db ]; then
             echo "events.db was not created."
             exit 1
           fi
+
+          mkdir -p /tmp/stayalive-state
+          cp events.db /tmp/stayalive-state/events.db
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          cp /tmp/stayalive-state/events.db events.db
           git add events.db
+
           if git diff --cached --quiet; then
             echo "No database changes."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: event sync"
-          git fetch origin main
-          git reset --hard origin/main
-          git add events.db
-          if git diff --cached --quiet; then
-            echo "Database already persisted after sync."
-            exit 0
-          fi
           git commit -m "chore: event sync"
           git push origin HEAD:main
