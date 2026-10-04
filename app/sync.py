@@ -3,6 +3,7 @@
 # Scheduled sync also performs semantic category and duplicate cleanup.
 
 import hashlib
+import json
 import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -103,22 +104,19 @@ def canonical_category(category: str) -> str:
     return value
 
 CATEGORY_RULES = (
-    ("🎭 Comedy", re.compile(r"\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комед\w*|комик\w*|юмор)\b", re.I)),
-    ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|masterclass|master class|class|seminar|lecture|course|мастер[- ]?класс|воркшоп|семинар|лекци|курс|занят)\b", re.I)),
-    ("🎪 Фестивали", re.compile(r"\b(festival|фестиваль|карнавал|carnival|fest)\b", re.I)),
-    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|trek|trekking|picnic|nature|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|пикник\w*|природ\w*|треккинг\w*|йог\w*|фитнес\w*|футбол\w*|баскетбол\w*|велопрогул\w*|спорт\w*)\b", re.I)),
-    ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|beer|cocktail|дегустац|вино|ужин|еда|шеф|ресторан|вин|пиво|коктейл|гастроном)\b", re.I)),
-    ("🎨 Искусство", re.compile(r"\b(art|gallery|exhibition|opening|museum|painting|sculpture|photo|искусств|выстав|галере|музе|живопис|скульптур|фото)\b", re.I)),
-    ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
-    ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|children|family|families|дет\w*|семейн|для детей)\b", re.I)),
-    ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|dance performance|contemporary dance|театр|кино|фильм|показ|спектакл|хореограф\w*|танцевальн\w*)\b", re.I)),
-    ("🪩 Nightlife", re.compile(r"\b(party|club|club night|rave|disco|nightlife|dj|dj set|techno|hard techno|house music|deep house|tech house|afro house|melodic house|progressive house|psytrance|psy trance|trance|drum.?n.?bass|dnb|electro|electronica|electronic music|indiedance|nu disco|downtempo|dancefloor|dance floor|all night long|вечерин\w*|клуб\w*|рейв|дискотек|ночн\w*)\b", re.I)),
-    ("🎵 Музыка", re.compile(r"\b(concert|live music|music|band|gig|singer|pianist|concerts|музык\w*|концерт\w*|диджей|ди-джей|группа|певец|джаз|джем|jazz|blues)\b", re.I)),
+    ("🎭 Comedy", re.compile(r"\b(stand[- ]?up|standup|comedy|comedian|comic|open mic|improv|improvisation|roast|sketch comedy|funny|стендап|стендапер|комед\w*|комик\w*|юмор\w*|импровизац\w*|роуст|смешн\w*)\b", re.I)),
+    ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|workshops|masterclass|master class|class|classes|course|courses|seminar|seminars|lecture|lectures|talk|training|training session|lesson|lessons|hands[- ]?on|tutorial|воркшоп\w*|мастер[- ]?класс\w*|класс\w*|курс\w*|семинар\w*|лекци\w*|заняти\w*|обучени\w*|тренинг\w*|урок\w*|практикум\w*)\b", re.I)),
+    ("🎪 Фестивали", re.compile(r"\b(festival|festivals|fest|festive|carnival|carnivals|фестиваль\w*|фест\w*|карнавал\w*|праздник\w*)\b", re.I)),
+    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|runner|race|marathon|half marathon|trail run|trail running|hike|hiking|hiker|trek|trekking|walk|walking|bike|biking|cycling|cyclist|ride|yoga|pilates|fitness|workout|gym|football|basketball|volleyball|tennis|padel|swimming|surfing|kitesurfing|watersports|sport|sports|outdoor|nature|wellness|retreat|picnic|beach walk|climb|climbing|марафон\w*|забег\w*|бег\w*|пробег\w*|поход\w*|треккинг\w*|прогул\w*|велосипед\w*|велопрогул\w*|велозаезд\w*|йог\w*|пилатес\w*|фитнес\w*|трениров\w*|спорт\w*|футбол\w*|баскетбол\w*|волейбол\w*|теннис\w*|падел\w*|плаван\w*|серф\w*|кайтсерф\w*|аутдор|природ\w*|пикник\w*|скалолаз\w*|кемпинг\w*)\b", re.I)),
+    ("🍷 Еда и вино", re.compile(r"\b(wine|wines|winery|winemaker|wine tasting|tasting|tastings|degustation|dinner|dinners|lunch|brunch|breakfast|food|foodie|chef|chefs|restaurant|restaurants|bistro|osteria|beer|beers|cocktail|cocktails|mixology|spirits|gin|whisky|whiskey|rum|aperitivo|aperitif|pairing|food pairing|gourmet|gastronomy|bakery|baking|street food|вино\w*|винодель\w*|виноград\w*|дегустац\w*|ужин\w*|обед\w*|бранч\w*|завтрак\w*|еда|ед\w*|гастроном\w*|шеф\w*|ресторан\w*|бистр\w*|остери\w*|пиво\w*|коктейл\w*|джин\w*|виски\w*|ром\w*|аперитив\w*|сочетани\w*|фуд\w*|кулинар\w*|выпечк\w*|вин\w*)\b", re.I)),
+    ("🎨 Искусство", re.compile(r"\b(art|arts|artist|artists|artwork|artworks|gallery|galleries|exhibition|exhibitions|opening|vernissage|museum|museums|painting|paintings|sculpture|sculptures|photography|photo exhibition|photographer|illustration|illustrator|drawing|drawings|design|designer|craft|crafts|ceramics|pottery|installation|installations|visual arts|contemporary art|modern art|performance art|искусств\w*|худож\w*|арт\w*|выстав\w*|экспозиц\w*|галере\w*|музе\w*|живопис\w*|скульптур\w*|фотограф\w*|иллюстрац\w*|рисован\w*|дизайн\w*|дизайнер\w*|ремесл\w*|керамик\w*|гончар\w*|инсталляц\w*|перформанс\w*)\b", re.I)),
+    ("🛍 Маркеты и шопинг", re.compile(r"\b(market|markets|bazaar|bazaars|flea market|flea markets|pop[- ]?up|popup|shopping|shop|shops|makers market|craft fair|design market|street market|farmers market|vintage market|маркет\w*|базар\w*|барахол\w*|ярмарк\w*|фримаркет|поп[- ]?ап|шопинг\w*|магазин\w*|дизайн[- ]?маркет\w*|фермерск\w*|винтажн\w*|крафт[- ]?маркет\w*)\b", re.I)),
+    ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|kid|children|child|family|families|family-friendly|for kids|for children|parents|baby|babies|toddler|teen|teens|дет\w*|ребён\w*|ребен\w*|семейн\w*|для детей|родител\w*|малыш\w*|подрост\w*)\b", re.I)),
+    ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|movies|film|films|screening|screenings|play|plays|musical|opera|ballet|dance performance|contemporary dance|performing arts|stage|staged|театр\w*|кино\w*|фильм\w*|показ\w*|спектакл\w*|мюзикл\w*|опера\w*|балет\w*|хореограф\w*|танцевальн\w*|сцен\w*|постановк\w*)\b", re.I)),
+    ("🪩 Nightlife", re.compile(r"\b(party|parties|club|clubs|club night|clubnight|rave|raves|disco|discotheque|nightlife|night life|dj|dj set|dj night|techno|hard techno|melodic techno|house music|deep house|tech house|afro house|melodic house|progressive house|minimal|minimal techno|psytrance|psy trance|trance|drum.?n.?bass|dnb|electro|electronic|electronica|indiedance|nu disco|downtempo|dancefloor|dance floor|all night long|afterparty|after party|warehouse party|вечерин\w*|клуб\w*|рейв\w*|дискотек\w*|ночн\w*|диджей|ди-джей|техно|хаус|транс|электро\w*|электронн\w*|танцпол\w*)\b", re.I)),
+    ("🎵 Музыка", re.compile(r"\b(concert|concerts|live music|live|music|musician|musicians|band|bands|gig|gigs|singer|singers|vocal|vocalist|pianist|violin|orchestra|ensemble|choir|jazz|blues|soul|funk|rock|indie|acoustic|songwriter|jam|jamming|session|music night|concert hall|музык\w*|концерт\w*|группа\w*|пев\w*|вокал\w*|пианист\w*|скрипач\w*|оркестр\w*|ансамбл\w*|хор\w*|джаз\w*|блюз\w*|соул\w*|фанк\w*|рок\w*|инди\w*|акустик\w*|авторск\w*|джем\w*|сесс\w*)\b", re.I)),
 )
 
-# Category detection is deliberately title-first and weighted. The old
-# first-match regex made generic words in descriptions (e.g. "night" or
-# "music") swallow hikes, workshops and festivals into Nightlife/Music.
 CATEGORY_WEIGHTS = {
     "🎭 Comedy": 7,
     "🧑‍🏫 Воркшопы": 7,
@@ -151,7 +149,8 @@ def _category_score(category: str, title: str, description: str, venue: str, exp
         reasons.append("source_category")
     return score, ",".join(reasons)
 
-def classify_event(event: dict) -> str:
+def classify_event(event: dict) -> list[str]:
+    """Return every meaningful category supported by the event."""
     source_url = str(event.get("source_url", "") or "").lower()
     title = str(event.get("title", "") or "")
     description = str(event.get("description", "") or "")
@@ -159,70 +158,75 @@ def classify_event(event: dict) -> str:
     explicit = canonical_category(event.get("category"))
 
     if "stantarkkomety.com" in source_url:
-        return "🎭 Comedy"
+        return ["🎭 Comedy"]
 
     title_scores = []
     all_scores = []
-    for category, _pattern in CATEGORY_RULES:
+    for category, pattern in CATEGORY_RULES:
         score, reason = _category_score(category, title, description, venue, explicit)
-        all_scores.append((score, category, reason))
-        title_hits = len(dict(CATEGORY_RULES)[category].findall(title))
+        title_hits = len(pattern.findall(title))
+        description_hits = len(pattern.findall(description))
+        venue_hits = len(pattern.findall(venue))
+        all_scores.append((score, category, reason, title_hits, description_hits, venue_hits))
         if title_hits:
-            title_scores.append((title_hits * CATEGORY_WEIGHTS[category], category, reason))
+            title_scores.append((title_hits * CATEGORY_WEIGHTS[category], category))
 
-    # A clear title signal must beat noisy description metadata. This prevents
-    # words such as "night", "music", or "dance" in descriptions from turning
-    # a picnic, theatre performance, exhibition, etc. into Nightlife.
+    # Multiple title themes are allowed: "Wine & Art Opening" -> Food + Art.
     if title_scores:
         title_scores.sort(key=lambda item: (-item[0], item[1]))
-        best_title_score, best_category, _ = title_scores[0]
-        tied = [item for item in title_scores if item[0] == best_title_score]
-        if len(tied) > 1:
-            # Only use description/venue as a tie-break when the title itself
-            # signals more than one category.
-            candidates = {item[1] for item in tied}
-            ranked = sorted(
-                (
-                    (score, category, reason)
-                    for score, category, reason in all_scores
-                    if category in candidates
-                ),
-                key=lambda item: (-item[0], item[1]),
-            )
-            return ranked[0][1]
-        return best_category
+        selected = [category for _score, category in title_scores]
+        best_title = title_scores[0][0]
+        for score, category, _reason, _title_hits, desc_hits, venue_hits in all_scores:
+            if category in selected:
+                continue
+            if desc_hits >= 2 and score >= max(4, best_title * 0.35):
+                selected.append(category)
+        return list(dict.fromkeys(selected)) or ([explicit] if explicit else ["✨ Другое"])
 
-    # Strong nightlife language in the event description should override
-    # generic music labels emitted by parsers (especially ETKO/Telegram).
-    # "music" is often merely contextual, while party/club/DJ/techno language
-    # is a direct signal that the event belongs in Nightlife.
-    if not title_scores:
-        nightlife_pattern = dict(CATEGORY_RULES)["🪩 Nightlife"]
-        if nightlife_pattern.search(description):
-            return "🪩 Nightlife"
+    # No title signal: keep multiple strong contextual categories when close
+    # enough to the best signal.
+    scores = [item for item in all_scores if item[0]]
+    if not scores:
+        return [explicit] if explicit else ["✨ Другое"]
+    scores.sort(key=lambda item: (-item[0], item[1]))
+    best_score = scores[0][0]
+    selected = []
+    for score, category, _reason, _title_hits, desc_hits, venue_hits in scores:
+        if score < 2:
+            continue
+        if score >= max(2, best_score * 0.5) and (desc_hits >= 1 or venue_hits >= 2):
+            selected.append(category)
 
-    # Cyprus Underground is a nightlife source, but source provenance alone
-    # must not force every listing into Nightlife.
+    if explicit and explicit not in selected:
+        explicit_score = next((score for score, cat, *_rest in scores if cat == explicit), 0)
+        if not selected or explicit_score >= best_score * 0.5:
+            selected.append(explicit)
+    if not selected:
+        selected = [scores[0][1]]
+
     if "cyprusunderground.com.cy" in source_url:
         electronic = re.search(
             r"\b(techno|house|deep house|tech house|minimal|progressive|psy|psytrance|drum.?n.?bass|dnb|electro|breaks|trance|club|rave|dj)\b",
-            f"{title} {description} {venue}",
-            re.I,
+            f"{title} {description} {venue}", re.I,
         )
-        if electronic:
-            all_scores.append((6, "🪩 Nightlife", "cyprus_underground"))
+        if electronic and "🪩 Nightlife" not in selected:
+            selected.append("🪩 Nightlife")
+    return list(dict.fromkeys(selected))
 
-    scores = [item for item in all_scores if item[0]]
-    if not scores:
-        return explicit or "✨ Другое"
 
-    scores.sort(key=lambda item: (-item[0], item[1]))
-    best_score, best_category, best_reason = scores[0]
-    if explicit and explicit in CATEGORY_WEIGHTS:
-        explicit_score = next((score for score, cat, _ in scores if cat == explicit), 0)
-        if best_category != explicit and "title=" not in best_reason and best_score <= explicit_score:
-            return explicit
-    return best_category
+def _event_categories(event: dict) -> list[str]:
+    """Read multi-category data with backward compatibility for old rows."""
+    raw = event.get("categories", "")
+    if raw:
+        try:
+            values = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError, json.JSONDecodeError):
+            values = []
+        if isinstance(values, list):
+            result = [canonical_category(value) for value in values]
+            return list(dict.fromkeys(value for value in result if value))
+    category = canonical_category(event.get("category"))
+    return [category] if category else ["✨ Другое"]
 
 
 def _normalize(events: list[dict]) -> list[dict]:
@@ -230,43 +234,30 @@ def _normalize(events: list[dict]) -> list[dict]:
     for event in events:
         normalize_event_dates(event)
         translate_event(event)
-        event["category"] = classify_event(event)
-        raw = "|".join(
-            str(event.get(key, "")).strip().lower()
-            for key in (
-                "title",
-                "date",
-                "end_date",
-                "time",
-                "venue",
-                "city",
-            )
-        )
+        categories = classify_event(event)
+        event["categories"] = json.dumps(categories, ensure_ascii=False)
+        event["category"] = categories[0] if categories else "✨ Другое"
+        raw = "|".join(str(event.get(key, "")).strip().lower() for key in ("title","date","end_date","time","venue","city"))
         event["content_hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         normalized.append(event)
     return normalized
 
 
 def recategorize_existing_events() -> int:
-    """Reclassify stored events using the current category rules."""
+    """Reclassify stored events using the current multi-category rules."""
     from app.database import get_connection
-
     changed = 0
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM events").fetchall()
         for row in rows:
             event = dict(row)
-            # The stored event category is the result of a previous
-            # classification, not an authoritative source category. Passing it
-            # back into classify_event() makes old Nightlife labels reinforce
-            # themselves forever. Reclassify from the event's actual content.
             event["category"] = ""
-            category = classify_event(event)
-            if category != (row["category"] or ""):
-                conn.execute(
-                    "UPDATE events SET category = ? WHERE id = ?",
-                    (category, row["id"]),
-                )
+            event["categories"] = ""
+            categories = classify_event(event)
+            categories_json = json.dumps(categories, ensure_ascii=False)
+            primary = categories[0] if categories else "✨ Другое"
+            if primary != (row["category"] or "") or categories_json != (row["categories"] or ""):
+                conn.execute("UPDATE events SET category = ?, categories = ? WHERE id = ?", (primary, categories_json, row["id"]))
                 changed += 1
         conn.commit()
     return changed
