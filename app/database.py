@@ -434,6 +434,7 @@ def deduplicate_exact_events() -> int:
 
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     init_db()
+    deduplicate_exact_events()
     with get_connection() as conn:
         rows = conn.execute(
             """SELECT * FROM events
