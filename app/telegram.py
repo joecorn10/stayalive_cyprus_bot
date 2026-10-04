@@ -324,22 +324,9 @@ def poll_once(token: str) -> bool:
                                     )
                                 except Exception as exc:
                                     print(
-                                        f"Telegram edit failed, sending result separately: {exc}",
+                                        f"Telegram edit failed; keeping the single progress message: {exc}",
                                         file=sys.stderr,
                                     )
-                                    try:
-                                        send_message(
-                                            token,
-                                            chat_id,
-                                            reply_text,
-                                            keyboard,
-                                            parse_mode=None,
-                                        )
-                                    except Exception as send_exc:
-                                        print(
-                                            f"Telegram fallback send failed: {send_exc}",
-                                            file=sys.stderr,
-                                        )
                             else:
                                 sent_id = send_message(token, chat_id, reply_text, keyboard)
                                 print(
