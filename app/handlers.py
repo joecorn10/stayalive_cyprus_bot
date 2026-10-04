@@ -19,7 +19,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
-from app.sync import canonical_category, recategorize_existing_events, sync_source_by_url
+from app.sync import canonical_category, recategorize_existing_events, sync_all
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -274,9 +274,9 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         if action == "today":
             set_chat_state(chat_id, "idle")
             try:
-                sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+                sync_all()
             except Exception as exc:
-                print(f"Stantar Kkomety refresh failed: {exc}")
+                print(f"Full sync failed: {exc}")
             today = cyprus_today()
             text, keyboard = format_events("📅 Сегодня", list_events(today.isoformat(), today.isoformat()), display_date=today)
             return chat_id, text, keyboard or main_menu()
@@ -405,7 +405,7 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "📅 Сегодня":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: refreshing Stantar Kkomety, then using SQLite snapshot")
+        print("Telegram event request: refreshing all sources before building results")
         try:
             sync_source_by_url("https://stantarkkomety.com/festival/tickets")
         except Exception as exc:
