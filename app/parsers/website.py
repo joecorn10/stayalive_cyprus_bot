@@ -19,7 +19,8 @@ class WebsiteParser(EventParser):
         self.url = url
 
     def parse(self) -> list[dict]:
-        response = requests.get(self.url, timeout=20, headers=HEADERS)
+        request_timeout = 8 if "cyprus.bz" in self.url else 20
+        response = requests.get(self.url, timeout=request_timeout, headers=HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         if "stantarkkomety.com" in self.url:
