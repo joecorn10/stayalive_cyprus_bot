@@ -6,6 +6,7 @@ on:
     # Refresh the event database every 30 minutes.
     - cron: "7,37 * * * *"
 
+
 permissions:
   contents: write
 
@@ -54,5 +55,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: event sync"
           git fetch origin main
-          git rebase origin/main
+          git reset --hard origin/main
+          git add events.db
+          if git diff --cached --quiet; then
+            echo "Database already persisted after sync."
+            exit 0
+          fi
+          git commit -m "chore: event sync"
           git push origin HEAD:main
