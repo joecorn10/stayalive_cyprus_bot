@@ -1064,6 +1064,24 @@ def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
             (end_date, start_date),
         ).fetchall()
 
+def list_events_for_period(
+    start_date: str,
+    end_date: str,
+    category: str | None = None,
+) -> list[sqlite3.Row]:
+    """Return catalogue events for a period, optionally filtered by categories JSON.
+
+    The categories JSON is the source of truth. The legacy category column
+    remains only as the primary/display category for compatibility.
+    """
+    rows = list_events(start_date, end_date)
+    if not category:
+        return rows
+
+    from app.sync import _event_categories
+    return [row for row in rows if category in _event_categories(row)]
+
+
 def cache_is_fresh(cache_key: str, ttl_minutes: int = 30) -> bool:
     init_db()
     from datetime import datetime, timedelta, timezone
