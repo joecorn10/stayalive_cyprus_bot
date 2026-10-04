@@ -163,24 +163,55 @@ def deduplicate_sources() -> int:
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM sources ORDER BY id").fetchall()
         keepers = {}
+
         for row in rows:
-            key = (canonical_source_url(row["url"]), str(row["type"] or "").casefold())
+            canonical = canonical_source_url(row["url"])
+            key = (canonical, str(row["type"] or "").casefold())
             keeper = keepers.get(key)
+
             if keeper is None:
-                keepers[key] = row
-                canonical = canonical_source_url(row["url"])
-                if canonical != row["url"]:
-                    conn.execute("UPDATE sources SET url = ? WHERE id = ?", (canonical, row["id"]))
+                # A canonical row may already exist later in the table. Find it
+                # before attempting UPDATE, otherwise SQLite hits UNIQUE(url).
+                existing = conn.execute(
+                    "SELECT * FROM sources WHERE url = ? AND id != ? LIMIT 1",
+                    (canonical, row["id"]),
+                ).fetchone()
+
+                if existing is not None:
+                    existing_key = (
+                        canonical_source_url(existing["url"]),
+                        str(existing["type"] or "").casefold(),
+                    )
+                    if existing_key == key:
+                        keeper = existing
+                        keepers[key] = keeper
+                    else:
+                        keeper = row
+                        keepers[key] = keeper
+                else:
+                    keeper = row
+                    keepers[key] = keeper
+
+            if keeper["id"] != row["id"]:
+                conn.execute(
+                    """INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url)
+                       SELECT event_id, ?, source_url
+                       FROM event_sources WHERE source_id = ?""",
+                    (keeper["id"], row["id"]),
+                )
+                conn.execute(
+                    "DELETE FROM event_sources WHERE source_id = ?", (row["id"],)
+                )
+                conn.execute("DELETE FROM sources WHERE id = ?", (row["id"],))
+                removed += 1
                 continue
-            conn.execute(
-                """INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url)
-                   SELECT event_id, ?, source_url
-                   FROM event_sources WHERE source_id = ?""",
-                (keeper["id"], row["id"]),
-            )
-            conn.execute("DELETE FROM event_sources WHERE source_id = ?", (row["id"],))
-            conn.execute("DELETE FROM sources WHERE id = ?", (row["id"],))
-            removed += 1
+
+            if canonical != row["url"]:
+                conn.execute(
+                    "UPDATE sources SET url = ? WHERE id = ?",
+                    (canonical, row["id"]),
+                )
+
         conn.commit()
     return removed
 
