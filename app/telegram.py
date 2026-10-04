@@ -189,6 +189,13 @@ def poll_once(token: str) -> bool:
         update_offset = update["update_id"] + 1
         chat_id = None
         progress_message_id = None
+        # Claim the update before doing any slow work. Telegram recommends
+        # advancing getUpdates offset as soon as the batch is received; otherwise
+        # a worker restart during a slow sync can receive the same callback/message
+        # again and execute the user's request twice.
+        save_offset(update_offset)
+        print(f"Telegram poll: claimed offset={update_offset}")
+
         try:
             callback = update.get("callback_query")
             if callback:
@@ -369,8 +376,8 @@ def poll_once(token: str) -> bool:
                 except Exception as notify_exc:
                     print(f"Telegram error notification failed: {notify_exc}", file=sys.stderr)
         finally:
-            # Advance Telegram offset even when this update fails. This prevents
-            # one broken request from blocking every later update in the batch.
+            # Offset was already claimed before processing. Keep this final save
+            # as a safety net in case the state file was changed during handling.
             save_offset(update_offset)
             print(f"Telegram poll: saved offset={update_offset}")
 
