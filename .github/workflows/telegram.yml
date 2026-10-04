@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: stayalive-cyprus-state
+  group: stayalive-cyprus-telegram
   cancel-in-progress: false
 
 jobs:
