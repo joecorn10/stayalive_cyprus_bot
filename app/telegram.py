@@ -304,6 +304,9 @@ def poll_once(token: str) -> bool:
                                 # Adding a source should not wait for the next 5-minute
                                 # GitHub schedule. Parse just this source now, then show
                                 # the normal confirmation together with the sync result.
+                                # Remove the legacy reply keyboard before the
+                                # one visible source-check message is shown.
+                                clear_reply_keyboard(token, chat_id)
                                 check_message_id = send_message(
                                     token,
                                     chat_id,
