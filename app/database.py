@@ -596,8 +596,10 @@ def upsert_events(events: list[dict]) -> int:
                     (source_url,),
                 ).fetchone()
 
-            # One source page can contain many events. Do not treat source_url
-            # alone as the event identity.
+            # One source page can contain many events. Prefer an exact
+            # title match, but also match a unique source/date/time/venue slot.
+            # The latter is important when an old DB row has a translated title
+            # and the parser now correctly stores the original title.
             existing = conn.execute(
                 """SELECT * FROM events
                    WHERE source_url = ?
@@ -614,6 +616,23 @@ def upsert_events(events: list[dict]) -> int:
                     event.get("title", ""),
                 ),
             ).fetchone()
+
+            if not existing:
+                slot_rows = conn.execute(
+                    """SELECT * FROM events
+                       WHERE source_url = ?
+                         AND date = ?
+                         AND COALESCE(time, '') = ?
+                         AND COALESCE(venue, '') = ?""",
+                    (
+                        source_url,
+                        event.get("date", ""),
+                        event.get("time", ""),
+                        event.get("venue", ""),
+                    ),
+                ).fetchall()
+                if len(slot_rows) == 1:
+                    existing = slot_rows[0]
 
             # A content hash can collide when the same event is syndicated by
             # multiple sources. Reuse the existing row instead of letting the
