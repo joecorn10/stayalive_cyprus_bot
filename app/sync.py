@@ -110,7 +110,7 @@ CATEGORY_RULES = (
     ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
     ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|children|family|families|дет\w*|семейн|для детей)\b", re.I)),
     ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|театр|кино|фильм|показ|спектакл)\b", re.I)),
-    ("🪩 Nightlife", re.compile(r"\b(party|club|club night|rave|disco|nightlife|dj|dj set|techno|hard techno|house music|deep house|tech house|afro house|melodic house|progressive house|psytrance|psy trance|trance|drum.?n.?bass|dnb|electro|electronica|electronic music|indiedance|nu disco|downtempo|dancefloor|dance floor|all night long|вечерин\w*|клуб\w*|рейв|дискотек|ночн\w*|танц\w*)\b", re.I)),
+    ("🪩 Nightlife", re.compile(r"\b(party|club|club night|rave|disco|nightlife|dj|dj set|techno|hard techno|house music|deep house|tech house|afro house|melodic house|progressive house|psytrance|psy trance|trance|drum.?n.?bass|dnb|electro|electronica|electronic music|indiedance|nu disco|downtempo|dancefloor|dance floor|all night long|вечерин\w*|клуб\w*|рейв|дискотек|ночн\w*)\b", re.I)),
     ("🎵 Музыка", re.compile(r"\b(concert|live music|music|band|gig|singer|pianist|concerts|музык\w*|концерт\w*|диджей|ди-джей|группа|певец|джаз|джем|jazz|blues)\b", re.I)),
 )
 
@@ -156,19 +156,42 @@ def classify_event(event: dict) -> str:
     venue = str(event.get("venue", "") or "")
     explicit = canonical_category(event.get("category"))
 
-    # Strong source-specific facts.
     if "stantarkkomety.com" in source_url:
         return "🎭 Comedy"
 
-    scores = []
+    title_scores = []
+    all_scores = []
     for category, _pattern in CATEGORY_RULES:
         score, reason = _category_score(category, title, description, venue, explicit)
-        if score:
-            scores.append((score, category, reason))
+        all_scores.append((score, category, reason))
+        title_hits = len(dict(CATEGORY_RULES)[category].findall(title))
+        if title_hits:
+            title_scores.append((title_hits * CATEGORY_WEIGHTS[category], category, reason))
 
-    # Cyprus Underground is a nightlife source, but not every listing should
-    # be forced into Nightlife. Only use the source as a tie-breaker when the
-    # event itself looks like a club/electronic-music event.
+    # A clear title signal must beat noisy description metadata. This prevents
+    # words such as "night", "music", or "dance" in descriptions from turning
+    # a picnic, theatre performance, exhibition, etc. into Nightlife.
+    if title_scores:
+        title_scores.sort(key=lambda item: (-item[0], item[1]))
+        best_title_score, best_category, _ = title_scores[0]
+        tied = [item for item in title_scores if item[0] == best_title_score]
+        if len(tied) > 1:
+            # Only use description/venue as a tie-break when the title itself
+            # signals more than one category.
+            candidates = {item[1] for item in tied}
+            ranked = sorted(
+                (
+                    (score, category, reason)
+                    for score, category, reason in all_scores
+                    if category in candidates
+                ),
+                key=lambda item: (-item[0], item[1]),
+            )
+            return ranked[0][1]
+        return best_category
+
+    # Cyprus Underground is a nightlife source, but source provenance alone
+    # must not force every listing into Nightlife.
     if "cyprusunderground.com.cy" in source_url:
         electronic = re.search(
             r"\b(techno|house|deep house|tech house|minimal|progressive|psy|psytrance|drum.?n.?bass|dnb|electro|breaks|trance|club|rave|dj)\b",
@@ -176,25 +199,19 @@ def classify_event(event: dict) -> str:
             re.I,
         )
         if electronic:
-            scores.append((6, "🪩 Nightlife", "cyprus_underground"))
+            all_scores.append((6, "🪩 Nightlife", "cyprus_underground"))
 
+    scores = [item for item in all_scores if item[0]]
     if not scores:
         return explicit or "✨ Другое"
 
-    # Require a meaningful lead over a generic source category.
     scores.sort(key=lambda item: (-item[0], item[1]))
-    best_score, best_category, _reason = scores[0]
+    best_score, best_category, best_reason = scores[0]
     if explicit and explicit in CATEGORY_WEIGHTS:
-        explicit_score = next((s for s, cat, _ in scores if cat == explicit), 0)
-        if best_category != explicit:
-            best_reason = next((reason for score, cat, reason in scores if cat == best_category), "")
-            # A source-level category is useful as a fallback, but it must not
-            # override a clear title signal. This prevents legacy Nightlife
-            # labels from keeping hikes, picnics and festivals in Nightlife.
-            if "title=" not in best_reason and best_score <= explicit_score:
-                return explicit
+        explicit_score = next((score for score, cat, _ in scores if cat == explicit), 0)
+        if best_category != explicit and "title=" not in best_reason and best_score <= explicit_score:
+            return explicit
     return best_category
-
 
 
 def _normalize(events: list[dict]) -> list[dict]:
@@ -307,6 +324,16 @@ def sync_source(source) -> int:
     init_db()
     events = _normalize(_parse_source(source))
     added = upsert_events(events)
+
+    # Targeted syncs are used by Telegram Today/Week. Keep the visible
+    # catalogue clean even when only one source was refreshed.
+    recategorized = recategorize_existing_events()
+    if recategorized:
+        logger.info("Targeted sync reclassified %s existing events", recategorized)
+    deduplicated = deduplicate_events()
+    if deduplicated:
+        logger.info("Targeted sync merged %s semantic duplicate events", deduplicated)
+
     logger.info("%s targeted sync: %s new events", source["name"], added)
     return added
 
