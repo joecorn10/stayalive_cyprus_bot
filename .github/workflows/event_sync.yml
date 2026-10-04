@@ -3,9 +3,6 @@ name: Event sync
 on:
   schedule:
     - cron: "2/10 * * * *"
-  push:
-    paths:
-      - "data/.event_sync_trigger"
   workflow_dispatch:
 
 permissions:
