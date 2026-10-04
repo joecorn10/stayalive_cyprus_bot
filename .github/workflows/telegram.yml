@@ -5,7 +5,7 @@ on:
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
     # dependency installation and state persistence.
-    - cron: "7/10 * * * *"
+    - cron: "7-59/10 * * * *"
 
 permissions:
   contents: write
