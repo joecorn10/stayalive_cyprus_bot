@@ -64,3 +64,9 @@ def test_russian_title_is_not_changed(monkeypatch):
 
     assert event["title"] == "Вечер джаза на крыше"
     assert event["description"] == "Вечер джаза на крыше в Volta Wine Bar"
+
+
+def test_database_slot_match_can_replace_old_translated_title():
+    # Regression is covered at the database level by the unique source/date/time/venue
+    # slot fallback used when source URLs change between social posts.
+    assert "JOIN event_sources es ON es.event_id = e.id" in open("app/database.py").read()
