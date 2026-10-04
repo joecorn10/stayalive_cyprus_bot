@@ -114,6 +114,8 @@ def init_db() -> None:
             ("Cyprus.BZ", "https://cyprus.bz/", "Aggregator", "Cyprus-wide event discovery"),
             ("More.com Cyprus", "https://www.more.com/cy-en/tickets/", "Aggregator", "Ticketing and event listings"),
             ("Cyprus Journal Music", "https://t.me/cyprusjournalmusic", "Telegram", "Music and events in Cyprus"),
+            ("Cyprus Journal", "https://t.me/cyprusjournal", "Telegram", "Cyprus events, culture and city life"),
+            ("Cyprus Afisha", "https://t.me/cyprusafisha", "Telegram", "Cyprus events and nightlife listings"),
             ("Cyprus Beer Events", "https://t.me/cyprusBeerEvents", "Telegram", "Beer and events in Cyprus"),
             ("Cyproplan Telegram", "https://t.me/cyproplan", "Telegram", "Cyproplan events"),
             ("Cyprus Man Chat", "https://t.me/cyprus_man_chat", "Telegram", "Cyprus community and events"),
