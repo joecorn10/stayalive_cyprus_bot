@@ -414,6 +414,22 @@ def get_event(event_id: int):
         return conn.execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
 
 
+def _title_stem(token: str) -> str:
+    """Lightweight Russian/English stemming for cross-source title matching."""
+    token = str(token or "").lower()
+    suffixes = (
+        "иями", "ями", "ами", "ого", "ему", "ому", "ими", "ыми", "ьев",
+        "ов", "ев", "ей", "ый", "ий", "ой", "ые", "ие", "ых", "их",
+        "ым", "им", "ую", "юю", "ая", "яя", "ое", "ее", "ам", "ям",
+        "ах", "ях", "ом", "ем", "ing", "ers", "ies", "es", "ed", "ly",
+        "s", "а", "я", "ы", "и", "ь", "у", "ю", "е", "о",
+    )
+    for suffix in suffixes:
+        if token.endswith(suffix) and len(token) - len(suffix) >= 4:
+            return token[:-len(suffix)]
+    return token
+
+
 def _display_title_tokens(title: str) -> set[str]:
     import re
 
@@ -423,7 +439,8 @@ def _display_title_tokens(title: str) -> set[str]:
         "мероприятие", "event", "events", "праздник",
     }
     return {
-        token for token in value.split()
+        _title_stem(token)
+        for token in value.split()
         if len(token) >= 4 and token not in generic
     }
 
@@ -450,13 +467,36 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
     if a_end < b_start or b_end < a_start:
         return False
 
-    # Missing venue/time in one source should not prevent a match, but
-    # conflicting values are a strong signal that these are different events.
+    # Missing venue/time in one source should not prevent a match.
+    # Venue/city conflicts remain strong evidence of different events, while a
+    # time conflict can be a parser/source formatting error for festivals.
+    venue_conflict = False
+    city_conflict = False
+    time_conflict = False
+    generic_locations = {"cyprus", "limassol", "nicosia", "larnaca", "paphos"}
+
     for field in ("time", "venue", "city"):
         left_value = normalize(a[field])
         right_value = normalize(b[field])
         if left_value and right_value and left_value != right_value:
-            return False
+            if field == "time":
+                time_conflict = True
+            elif field == "venue":
+                venue_conflict = True
+            else:
+                city_conflict = True
+
+    venue_a = normalize(a["venue"])
+    venue_b = normalize(b["venue"])
+    if venue_a in generic_locations or venue_b in generic_locations:
+        venue_conflict = False
+    city_a = normalize(a["city"])
+    city_b = normalize(b["city"])
+    if city_a in generic_locations or city_b in generic_locations:
+        city_conflict = False
+
+    if venue_conflict or city_conflict:
+        return False
 
     left = _display_title_tokens(a["title"])
     right = _display_title_tokens(b["title"])
@@ -470,8 +510,11 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
         " ".join(sorted(right)),
     ).ratio()
 
-    # Category is intentionally ignored: classification can differ between
-    # sources and should never create two cards for the same event.
+    # A very strong title match is allowed to survive a conflicting time
+    # (common when one catalogue assigns a default 07:00 time).
+    if time_conflict:
+        return overlap >= 0.75 or similarity >= 0.88
+
     return overlap >= 0.67 or similarity >= 0.84
 
 
@@ -553,7 +596,14 @@ def deduplicate_exact_events() -> int:
                     for candidate in keepers
                     if compatible(candidate, row)
                     and (
-                        normalize(candidate["title"]) == title
+                        (
+                            normalize(candidate["title"]) == title
+                            and (
+                                not normalize(candidate["time"])
+                                or not normalize(row["time"])
+                                or normalize(candidate["time"]) == normalize(row["time"])
+                            )
+                        )
                         or _looks_like_duplicate_event(candidate, row)
                         or strong_context_match(candidate, row)
                     )
