@@ -1,5 +1,6 @@
 """SQLite database layer."""
 
+import json
 import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
