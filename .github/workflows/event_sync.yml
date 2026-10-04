@@ -9,6 +9,7 @@ on:
       - "app/sync.py"
       - "app/translator.py"
       - "app/parsers/**"
+      - "scripts/catalog_diagnostics.py"
       - ".github/workflows/event_sync.yml"
   workflow_dispatch:
 
