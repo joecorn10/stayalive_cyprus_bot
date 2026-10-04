@@ -19,7 +19,7 @@ from app.database import (
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
-from app.sync import canonical_category, recategorize_existing_events, sync_all
+from app.sync import _event_categories, canonical_category, recategorize_existing_events, sync_all
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
@@ -99,8 +99,8 @@ def format_events(
         return f"{title}\n\nПока событий не нашёл. Следующая проверка уже скоро 🔎", None
     counts = {}
     for event in events:
-        category = canonical_category(event["category"]) or "✨ Другое"
-        counts[category] = counts.get(category, 0) + 1
+        for category in _event_categories(event):
+            counts[category] = counts.get(category, 0) + 1
     categories = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     period = "today" if display_date else "week"
     return (
@@ -109,7 +109,7 @@ def format_events(
     )
 
 def format_category_events(category: str, events, period: str) -> tuple[str, dict | None]:
-    selected = [event for event in events if (canonical_category(event["category"]) or "✨ Другое") == category]
+    selected = [event for event in events if category in _event_categories(event)]
     if not selected:
         return f"{category}\n\nПока событий в этом направлении нет.", back_keyboard(period)
     lines = [f"{category} · {len(selected)}", ""]
@@ -283,9 +283,9 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
         if action == "week":
             set_chat_state(chat_id, "idle")
             try:
-                sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+                sync_all()
             except Exception as exc:
-                print(f"Stantar Kkomety refresh failed: {exc}")
+                print(f"Full sync failed: {exc}")
             today = cyprus_today()
             end = today + timedelta(days=6)
             text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
@@ -407,9 +407,9 @@ def handle_message(message: dict) -> tuple[str, dict]:
         set_chat_state(chat_id, "idle")
         print("Telegram event request: refreshing all sources before building results")
         try:
-            sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+            sync_all()
         except Exception as exc:
-            print(f"Stantar Kkomety refresh failed: {exc}")
+            print(f"Full sync failed: {exc}")
         today = cyprus_today()
         text, keyboard = format_events(
             "📅 Сегодня",
@@ -420,11 +420,11 @@ def handle_message(message: dict) -> tuple[str, dict]:
 
     if text == "🗓 На этой неделе":
         set_chat_state(chat_id, "idle")
-        print("Telegram event request: refreshing Stantar Kkomety, then using SQLite snapshot")
+        print("Telegram event request: refreshing all sources before building results")
         try:
-            sync_source_by_url("https://stantarkkomety.com/festival/tickets")
+            sync_all()
         except Exception as exc:
-            print(f"Stantar Kkomety refresh failed: {exc}")
+            print(f"Full sync failed: {exc}")
         today = cyprus_today()
         end = today + timedelta(days=6)
         text, keyboard = format_events("🗓 На этой неделе", list_events(today.isoformat(), end.isoformat()))
