@@ -368,7 +368,7 @@ def _event(title, description, date_value, end_date, time_value, city, category,
         "city": city,
         "price": _extract_price(description),
         "ticket_url": ticket_url,
-        "source_url": ticket_url,
+        "source_url": source_url,
         "image_url": "",
         "category": category or fallback_category,
     }
@@ -410,6 +410,12 @@ def _extract_price(text: str) -> str:
 
 def _infer_category(text: str) -> str:
     lower = text.lower()
+    if any(x in lower for x in (
+        "party", "parties", "club", "club night", "rave", "dj", "dj set",
+        "techno", "house", "disco", "nightlife", "вечерин", "клуб",
+        "рейв", "дискотек", "ночн",
+    )):
+        return "Nightlife"
     if any(x in lower for x in ("concert", "концерт", "джаз", "soul", "music", "музык")):
         return "Музыка"
     if any(x in lower for x in ("театр", "спектакл", "comedy", "комеди")):
