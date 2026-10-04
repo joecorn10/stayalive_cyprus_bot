@@ -617,6 +617,28 @@ def upsert_events(events: list[dict]) -> int:
                 ),
             ).fetchone()
 
+            if not existing and source:
+                # Telegram/Instagram/Facebook posts often have a different
+                # source_url for every post. Match a unique event slot within
+                # the registered source so an old translated title can be
+                # replaced by the original title on the next sync.
+                slot_rows = conn.execute(
+                    """SELECT e.* FROM events e
+                       JOIN event_sources es ON es.event_id = e.id
+                       WHERE es.source_id = ?
+                         AND e.date = ?
+                         AND COALESCE(e.time, '') = ?
+                         AND COALESCE(e.venue, '') = ?""",
+                    (
+                        source["id"],
+                        event.get("date", ""),
+                        event.get("time", ""),
+                        event.get("venue", ""),
+                    ),
+                ).fetchall()
+                if len(slot_rows) == 1:
+                    existing = slot_rows[0]
+
             if not existing:
                 slot_rows = conn.execute(
                     """SELECT * FROM events
