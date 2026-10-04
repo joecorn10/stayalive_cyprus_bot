@@ -44,9 +44,31 @@ def translate_to_russian(text: str, max_chars: int = 5000) -> str:
         return text
 
 
+def normalize_event_title(title: str) -> str:
+    """Turn scraped titles into concise, human-readable event names."""
+    value = str(title or "").strip()
+    if not value:
+        return value
+
+    # Remove common catalogue noise while preserving the actual event name.
+    value = re.sub(
+        r"^(?:event|events|cyprus underground|cyprus events)\s*[:|—–-]\s*",
+        "",
+        value,
+        flags=re.I,
+    )
+    value = re.sub(r"\s+", " ", value)
+    value = re.sub(r"\s*\|\s*", " — ", value)
+    value = re.sub(r"\s+[–—-]\s*$", "", value)
+    value = value.strip(" -–—|•·")
+    value = re.sub(r"([!?.,:;]){2,}", r"\1", value)
+    return value[:200].strip()
+
+
 def translate_event(event: dict) -> dict:
     # Keep venue/city names untouched. Translate human-facing event text.
-    event["title"] = translate_to_russian(event.get("title", ""), max_chars=300)
+    translated_title = translate_to_russian(event.get("title", ""), max_chars=300)
+    event["title"] = normalize_event_title(translated_title)
     if event.get("description"):
         event["description"] = translate_to_russian(
             event["description"], max_chars=5000
