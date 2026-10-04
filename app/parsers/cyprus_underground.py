@@ -63,7 +63,7 @@ class CyprusUndergroundParser(EventParser):
 
         if structured:
             for event in structured:
-                event["category"] = "Nightlife"
+                event["category"] = "🪩 Nightlife"
                 event["source_url"] = self.url
 
                 if not event.get("ticket_url"):
@@ -374,7 +374,7 @@ class CyprusUndergroundParser(EventParser):
                     "ticket_url": ticket_url,
                     "source_url": self.url,
                     "image_url": "",
-                    "category": "Nightlife",
+                    "category": "🪩 Nightlife",
                 }
             )
 
