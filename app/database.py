@@ -88,6 +88,8 @@ def init_db() -> None:
         if "end_date" not in columns:
             conn.execute("ALTER TABLE events ADD COLUMN end_date TEXT")
             conn.execute("UPDATE events SET end_date = date WHERE end_date IS NULL")
+        if "identity_key" not in columns:
+            conn.execute("ALTER TABLE events ADD COLUMN identity_key TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_state (
@@ -255,35 +257,104 @@ def update_source_comment(url: str, comment: str) -> None:
         conn.commit()
 
 
-def _event_key(event: dict) -> tuple:
-    import re
-    title = re.sub(r"[^a-z0-9а-яё]+", " ", str(event.get("title", "")).lower(), flags=re.I)
-    title = " ".join(title.split())
-    venue = re.sub(r"[^a-z0-9а-яё]+", " ", str(event.get("venue", "")).lower(), flags=re.I)
-    venue = " ".join(venue.split())
-    return (
-        title,
-        event.get("date", ""),
-        str(event.get("time", "")).lower().strip(),
-        venue,
-        str(event.get("city", "")).lower().strip(),
-    )
-
-
-def _canonical_title_for_identity(value: str) -> str:
+def _identity_text(value: str) -> str:
+    """Normalize titles/metadata for real-world event identity matching."""
     import re
     value = str(value or "").casefold()
     value = re.split(
-        r"\s+(?=(?:location|tickets?|register|registration|more info|price|doors?\s+open|we meet|bring your|в программе|группа|зарегистрироваться|получить\s+стартовый)\b)",
+        r"\s+(?=(?:location|tickets?|register|registration|more info|price|"
+        r"doors?\s+open|we meet|bring your|в программе|программа|"
+        r"группа|зарегистрироваться|получить\s+стартовый)\b)",
         value,
         maxsplit=1,
         flags=re.I,
     )[0]
     value = re.sub(r"[^a-z0-9а-яё]+", " ", value, flags=re.I)
+
+    replacements = (
+        (r"фестивал(?:ь|я|ю|ем|е|и|ей|ях)?", "festival"),
+        (r"концерт(?:а|у|ом|е|ы|ов|ах)?", "concert"),
+        (r"традицион(?:ный|ная|ное|ных|ного|ному|ным|ными)?", "traditional"),
+        (r"вкус(?:ов|ами|ах|ы)?", "flavour"),
+        (r"оливков(?:ый|ая|ое|ых|ого|ому|ым|ыми)?", "olive"),
+        (r"дерев(?:о|ья|ьев|у|ом|ами)?", "tree"),
+        (r"джаз(?:а|у|ом|е)?", "jazz"),
+        (r"соул(?:а|у|ом|е)?", "soul"),
+        (r"фанк(?:а|у|ом|е)?", "funk"),
+        (r"крыше?", "rooftop"),
+        (r"вечерин(?:ка|ки|ок|ку|кой|ках)?", "party"),
+        (r"вино(?:а|у|ом|е|в)?", "wine"),
+        (r"дегустаци(?:я|и|ю|ей|ях)?", "tasting"),
+        (r"выставк(?:а|и|у|ой|ах)?", "exhibition"),
+        (r"мастер[- ]класс(?:ы|а|ов|е|ах)?", "workshop"),
+        (r"мероприяти(?:е|я|й|ям|ями|ях)?", "event"),
+        (r"программ(?:а|ы|у|ой|е|ам|ами|ах)?", "program"),
+        (r"семейн(?:ый|ая|ое|ых|ого|ому|ым|ыми)?", "family"),
+        (r"праздник(?:а|у|ом|е|и|ов|ах)?", "celebration"),
+        (r"день", "day"),
+        (r"ноч(?:ь|и|ью|ей|ами)?", "night"),
+    )
+    for pattern, replacement in replacements:
+        value = re.sub(rf"\b{pattern}\b", replacement, value, flags=re.I)
+
+    translit = str.maketrans({
+        "а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ё":"e","ж":"zh",
+        "з":"z","и":"i","й":"y","к":"k","л":"l","м":"m","н":"n","о":"o",
+        "п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f","х":"kh","ц":"ts",
+        "ч":"ch","ш":"sh","щ":"shch","ъ":"","ы":"y","ь":"","э":"e","ю":"yu",
+        "я":"ya",
+    })
+    value = value.translate(translit)
     return " ".join(value.split())
 
 
+_IDENTITY_GENERIC = {
+    "a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "the", "to",
+    "this", "with", "event", "events", "program", "programme", "schedule",
+    "concert", "festival", "party", "night", "day", "celebration",
+}
+
+
+def _identity_tokens(value: str) -> set[str]:
+    import re
+    return {
+        token for token in re.findall(r"[a-z0-9]+", _identity_text(value))
+        if token not in _IDENTITY_GENERIC and len(token) > 1
+    }
+
+
+def _identity_key(event: dict) -> str:
+    import hashlib
+    parts = [
+        str(event.get("date", "")).strip(),
+        str(event.get("end_date") or event.get("date", "")).strip(),
+        _identity_text(event.get("city", "")),
+        _identity_text(event.get("venue", "")),
+        _identity_text(event.get("time", "")),
+        " ".join(sorted(_identity_tokens(event.get("title", "")))),
+    ]
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _event_key(event: dict) -> tuple:
+    return (
+        _identity_text(event.get("title", "")),
+        event.get("date", ""),
+        _identity_text(event.get("time", "")),
+        _identity_text(event.get("venue", "")),
+        _identity_text(event.get("city", "")),
+    )
+
+
 def _find_matching_event(conn: sqlite3.Connection, event: dict):
+    identity = _identity_key(event)
+    row = conn.execute(
+        "SELECT * FROM events WHERE identity_key = ? LIMIT 1",
+        (identity,),
+    ).fetchone()
+    if row:
+        return row
+
     key = _event_key(event)
     rows = conn.execute(
         """SELECT * FROM events
@@ -298,17 +369,32 @@ def _find_matching_event(conn: sqlite3.Connection, event: dict):
     return None
 
 
-def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
-    """Find the same real-world event when sources format its title differently."""
-    from difflib import SequenceMatcher
+def _event_semantic_score(event: dict) -> float:
+    import re
+    title = str(event.get("title") or "").strip()
+    tokens = _identity_tokens(title)
+    score = min(len(title), 160) / 160.0
+    score += min(len(tokens), 10) * 0.08
+    if re.search(r"\b(?:program|programme|schedule|мероприятий|мероприятия|программа)\b", title, re.I):
+        score -= 0.35
+    if len(title) < 8:
+        score -= 0.25
+    return score
 
-    title = _canonical_title_for_identity(event.get("title", ""))
-    if not title:
+
+def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
+    """Find the same real-world event across languages and source formatting."""
+    from difflib import SequenceMatcher
+    import re
+
+    title_tokens = _identity_tokens(event.get("title", ""))
+    if not title_tokens:
         return None
 
-    city = _canonical_title_for_identity(event.get("city", ""))
-    venue = _canonical_title_for_identity(event.get("venue", ""))
-    time = _canonical_title_for_identity(event.get("time", ""))
+    city = _identity_text(event.get("city", ""))
+    venue = _identity_text(event.get("venue", ""))
+    time = _identity_text(event.get("time", ""))
+    description_tokens = _identity_tokens(event.get("description", ""))
 
     rows = conn.execute(
         """SELECT * FROM events
@@ -317,48 +403,149 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
         (event.get("end_date") or event.get("date", ""), event.get("date", "")),
     ).fetchall()
 
-    title_tokens = set(title.split())
-    generic = {"event", "events", "вечеринка", "party", "концерт", "concert", "festival", "фестиваль"}
-    title_specific = title_tokens - generic
-
     best = None
     best_score = 0.0
 
     for row in rows:
-        other = _canonical_title_for_identity(row["title"])
-        if not other:
-            continue
-        other_tokens = set(other.split())
-        specific_other = other_tokens - generic
-        if len(title_specific) < 2 or len(specific_other) < 2:
+        other_tokens = _identity_tokens(row["title"])
+        if not other_tokens:
             continue
 
-        overlap = len(title_specific & specific_other) / max(1, min(len(title_specific), len(specific_other)))
-        similarity = SequenceMatcher(None, title, other).ratio()
-
-        row_city = _canonical_title_for_identity(row["city"])
-        row_venue = _canonical_title_for_identity(row["venue"])
-        row_time = _canonical_title_for_identity(row["time"])
+        row_city = _identity_text(row["city"])
+        row_venue = _identity_text(row["venue"])
+        row_time = _identity_text(row["time"])
 
         if city and row_city and city != row_city:
             continue
         if venue and row_venue and venue != row_venue:
             continue
+        if time and row_time and time != row_time:
+            continue
+
+        intersection = len(title_tokens & other_tokens)
+        overlap = intersection / max(1, min(len(title_tokens), len(other_tokens)))
+        union = len(title_tokens | other_tokens)
+        jaccard = intersection / max(1, union)
+        sequence = SequenceMatcher(
+            None,
+            _identity_text(event.get("title", "")),
+            _identity_text(row["title"]),
+        ).ratio()
+
+        other_description_tokens = _identity_tokens(row["description"])
+        description_overlap = 0.0
+        if description_tokens and other_description_tokens:
+            description_overlap = len(description_tokens & other_description_tokens) / max(
+                1, min(len(description_tokens), len(other_description_tokens))
+            )
 
         context = 0.0
+        if city and row_city and city == row_city:
+            context += 0.08
+        if venue and row_venue and venue == row_venue:
+            context += 0.14
         if time and row_time and time == row_time:
             context += 0.10
-        if venue and row_venue and venue == row_venue:
-            context += 0.12
-        if city and row_city and city == row_city:
-            context += 0.06
 
-        score = max(overlap, similarity) + context
-        if score > best_score and (overlap >= 0.78 or similarity >= 0.88):
+        generic_fragment = bool(re.search(
+            r"\b(?:program|programme|schedule|event|events|программа|мероприятий|мероприятия)\b",
+            str(event.get("title") or ""), re.I
+        ))
+        other_generic_fragment = bool(re.search(
+            r"\b(?:program|programme|schedule|event|events|программа|мероприятий|мероприятия)\b",
+            str(row["title"] or ""), re.I
+        ))
+        subset_match = bool(title_tokens <= other_tokens or other_tokens <= title_tokens)
+
+        score = max(overlap, jaccard * 1.15, sequence * 0.92, description_overlap * 0.85)
+        score += context
+
+        accept = (
+            overlap >= 0.80
+            or sequence >= 0.90
+            or description_overlap >= 0.82
+            or (subset_match and (generic_fragment or other_generic_fragment) and overlap >= 0.65)
+        )
+        if accept and score > best_score:
             best_score = score
             best = row
 
     return best
+
+
+def _merge_event_rows(conn: sqlite3.Connection, keeper, duplicate) -> None:
+    keeper_dict = dict(keeper)
+    duplicate_dict = dict(duplicate)
+
+    def choose(field: str) -> str:
+        a = str(keeper_dict.get(field) or "").strip()
+        b = str(duplicate_dict.get(field) or "").strip()
+        if not a:
+            return b
+        if not b:
+            return a
+        if field == "title":
+            return a if _event_semantic_score(keeper_dict) >= _event_semantic_score(duplicate_dict) else b
+        if field == "description":
+            return a if len(a) >= len(b) else b
+        return a
+
+    merged = dict(keeper_dict)
+    for field in ("title", "description", "category", "date", "end_date", "time", "venue", "city", "price", "ticket_url", "source_url", "image_url"):
+        merged[field] = choose(field)
+
+    merged_identity = _identity_key(merged)
+
+    conn.execute(
+        """UPDATE events SET
+           title=?, description=?, category=?, date=?, end_date=?, time=?,
+           venue=?, city=?, price=?, ticket_url=?, source_url=?, image_url=?,
+           content_hash=?, identity_key=?, last_seen_at=CURRENT_TIMESTAMP
+           WHERE id=?""",
+        (
+            merged["title"], merged["description"], merged["category"], merged["date"],
+            merged["end_date"], merged["time"], merged["venue"], merged["city"],
+            merged["price"], merged["ticket_url"], merged["source_url"], merged["image_url"],
+            keeper_dict.get("content_hash") or duplicate_dict.get("content_hash"),
+            merged_identity, keeper["id"],
+        ),
+    )
+
+    conn.execute(
+        """INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url)
+           SELECT ?, source_id, source_url FROM event_sources WHERE event_id = ?""",
+        (keeper["id"], duplicate["id"]),
+    )
+    conn.execute("DELETE FROM event_sources WHERE event_id = ?", (duplicate["id"],))
+    conn.execute("DELETE FROM events WHERE id = ?", (duplicate["id"],))
+
+
+def deduplicate_events() -> int:
+    """Persistently merge semantic duplicates already present in the database."""
+    init_db()
+    merged = 0
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM events ORDER BY date, id").fetchall()
+        for row in rows:
+            current = conn.execute("SELECT * FROM events WHERE id = ?", (row["id"],)).fetchone()
+            if not current:
+                continue
+            match = _find_fuzzy_event(conn, dict(current))
+            if match and match["id"] != current["id"]:
+                keeper, duplicate = (
+                    (current, match)
+                    if _event_semantic_score(current) >= _event_semantic_score(match)
+                    else (match, current)
+                )
+                _merge_event_rows(conn, keeper, duplicate)
+                merged += 1
+        for row in conn.execute("SELECT * FROM events").fetchall():
+            conn.execute(
+                "UPDATE events SET identity_key = ? WHERE id = ?",
+                (_identity_key(dict(row)), row["id"]),
+            )
+        conn.commit()
+    return merged
 
 
 def upsert_events(events: list[dict]) -> int:
@@ -411,6 +598,7 @@ def upsert_events(events: list[dict]) -> int:
             # Prefer an exact content-hash match over a looser source/date match.
             # Otherwise updating the looser match can create a duplicate hash.
             match = by_hash or existing or _find_matching_event(conn, event) or _find_fuzzy_event(conn, event)
+            identity_key = _identity_key(event)
 
             values = (
                 event.get("title", ""),
@@ -426,6 +614,7 @@ def upsert_events(events: list[dict]) -> int:
                 source_url,
                 event.get("image_url", ""),
                 event.get("content_hash"),
+                identity_key,
             )
 
             if match:
@@ -434,7 +623,7 @@ def upsert_events(events: list[dict]) -> int:
                        title = ?, description = ?, category = ?, date = ?,
                        end_date = ?, time = ?, venue = ?, city = ?, price = ?,
                        ticket_url = ?, source_url = ?, image_url = ?, content_hash = ?,
-                       last_seen_at = CURRENT_TIMESTAMP
+                       identity_key = ?, last_seen_at = CURRENT_TIMESTAMP
                        WHERE id = ?""",
                     values + (match["id"],),
                 )
@@ -443,8 +632,8 @@ def upsert_events(events: list[dict]) -> int:
                 cursor = conn.execute(
                     """INSERT INTO events
                        (title, description, category, date, end_date, time, venue, city,
-                        price, ticket_url, source_url, image_url, content_hash)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        price, ticket_url, source_url, image_url, content_hash, identity_key)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     values,
                 )
                 event_id = cursor.lastrowid
