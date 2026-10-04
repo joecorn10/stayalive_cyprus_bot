@@ -103,7 +103,7 @@ CATEGORY_RULES = (
     ("🪩 Nightlife", re.compile(r"\b(party|club|rave|disco|nightlife|вечерин|клуб|рейв|ночь|танц)\b", re.I)),
     ("🎭 Театр и кино", re.compile(r"\b(theatre|theater|cinema|movie|film|screening|play|театр|кино|фильм|показ|спектакл)\b", re.I)),
     ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|masterclass|class|seminar|lecture|course|мастер[- ]?класс|воркшоп|семинар|лекци|курс|занят)\b", re.I)),
-    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|йог|фитнес|футбол|баскетбол|велопрогул|спорт)\b", re.I)),
+    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|trek|trekking|picnic|nature|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|йог|фитнес|футбол|баскетбол|велопрогул|спорт|пикник|природ|треккинг)\b", re.I)),
     ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
     ("👨‍👩‍👧 Семья", re.compile(r"\b(kids|children|family|families|дет|семейн|для детей)\b", re.I)),
     ("🎪 Фестивали", re.compile(r"\b(festival|фестиваль|карнавал|carnival)\b", re.I)),
