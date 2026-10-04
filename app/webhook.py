@@ -89,17 +89,34 @@ def _process_update(update: dict) -> None:
         if callback:
             callback_id = callback.get("id")
             callback_data = (callback.get("data") or "").strip()
+            message = callback.get("message") or {}
+            message_id = message.get("message_id")
+            loading = callback_data in ("main:today", "main:week")
+
             if callback_id:
                 try:
-                    callback_notice = None
-                    if callback_data in ("main:today", "main:week"):
-                        callback_notice = "⏳ Загружаю результаты…"
                     payload = {"callback_query_id": callback_id}
-                    if callback_notice:
-                        payload["text"] = callback_notice
+                    if loading:
+                        payload["text"] = "⏳ Загружаю результаты…"
                     api_call(TOKEN, "answerCallbackQuery", payload)
                 except Exception as exc:
                     print(f"Telegram callback acknowledgement failed: {exc}")
+
+            # Keep the loading state visible on the actual message while the
+            # full source sync runs. handle_callback() performs the sync for
+            # Today/Week and can take several seconds.
+            if loading and message_id:
+                try:
+                    edit_message(
+                        TOKEN,
+                        (message.get("chat") or {}).get("id"),
+                        message_id,
+                        "⏳ <b>Загружаю результаты…</b>\n\nОбновляю источники и собираю события.",
+                        None,
+                        parse_mode="HTML",
+                    )
+                except Exception as exc:
+                    print(f"Telegram loading message edit failed: {exc}")
 
             chat_id, reply_text, keyboard = handle_callback(callback)
             if chat_id is None:
