@@ -63,12 +63,15 @@ def _date_label(value: str) -> str:
 
 
 def _event_active_on(event, day: date) -> bool:
-    start = datetime.fromisoformat(event["date"]).date()
-    end = (
-        datetime.fromisoformat(event["end_date"]).date()
-        if event["end_date"]
-        else start
-    )
+    try:
+        start = datetime.fromisoformat(str(event["date"])).date()
+        end = (
+            datetime.fromisoformat(str(event["end_date"])).date()
+            if event["end_date"]
+            else start
+        )
+    except (TypeError, ValueError):
+        return False
     return start <= day <= end
 
 
@@ -112,7 +115,11 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
     lines = [f"{category} · {len(selected)}", ""]
     current_day = None
     for event in selected[:30]:
-        event_day = datetime.fromisoformat(event["date"]).date()
+        try:
+            event_day = datetime.fromisoformat(str(event["date"])).date()
+        except (TypeError, ValueError):
+            # One malformed legacy row must never break an entire category.
+            continue
         day_key = event_day.isoformat()
         if day_key != current_day:
             if current_day is not None:
