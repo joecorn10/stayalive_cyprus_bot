@@ -331,12 +331,42 @@ def _identity_tokens(value: str) -> set[str]:
     }
 
 
+def _identity_title_tokens(event: dict) -> set[str]:
+    """Build language-independent title tokens without changing the stored title.
+
+    Event titles stay exactly as sourced. When our Russian comment contains the
+    translated title, use that comment as the identity language for non-Russian
+    titles. This lets an English source and a Russian source converge on the
+    same event without maintaining a growing hand-written translation dictionary.
+    """
+    import re
+
+    title = str(event.get("title", "") or "")
+    description = str(event.get("description", "") or "")
+    title_tokens = _identity_tokens(title)
+
+    # build_event_comment() starts with a Russian translation of the title.
+    # Use only the first sentence so venue/details from the comment cannot
+    # become part of the event name identity.
+    first_sentence = re.split(r"(?<=[.!?])\\s+", description, maxsplit=1)[0].strip()
+    if not first_sentence:
+        first_sentence = description.strip()
+    comment_tokens = _identity_tokens(first_sentence)
+
+    has_cyrillic_title = bool(re.search(r"[а-яё]", title, re.I))
+    has_cyrillic_comment = bool(re.search(r"[а-яё]", first_sentence, re.I))
+
+    if comment_tokens and has_cyrillic_comment and not has_cyrillic_title:
+        return comment_tokens
+    return title_tokens
+
+
 def _identity_key(event: dict) -> str:
     import hashlib
     city = _identity_text(event.get("city", ""))
     venue = _identity_text(event.get("venue", ""))
     time = _identity_text(event.get("time", ""))
-    title_tokens = _identity_tokens(event.get("title", ""))
+    title_tokens = _identity_title_tokens(event)
     title_tokens -= _identity_tokens(city)
     title_tokens -= _identity_tokens(venue)
     title_tokens -= _identity_tokens(time)
@@ -405,7 +435,7 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     city = _identity_text(event.get("city", ""))
     venue = _identity_text(event.get("venue", ""))
     time = _identity_text(event.get("time", ""))
-    title_tokens = _identity_tokens(event.get("title", ""))
+    title_tokens = _identity_title_tokens(event)
     title_tokens -= _identity_tokens(city)
     title_tokens -= _identity_tokens(venue)
     title_tokens -= _identity_tokens(time)
@@ -426,7 +456,7 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     for row in rows:
         if exclude_id is not None and row["id"] == exclude_id:
             continue
-        other_tokens = _identity_tokens(row["title"])
+        other_tokens = _identity_title_tokens(dict(row))
         row_city = _identity_text(row["city"])
         row_venue = _identity_text(row["venue"])
         row_time = _identity_text(row["time"])
@@ -449,8 +479,8 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
         jaccard = intersection / max(1, union)
         sequence = SequenceMatcher(
             None,
-            _identity_text(event.get("title", "")),
-            _identity_text(row["title"]),
+            " ".join(sorted(title_tokens)),
+            " ".join(sorted(other_tokens)),
         ).ratio()
 
         # A near-identical title on the same date/time/city is stronger
