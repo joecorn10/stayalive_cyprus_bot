@@ -166,22 +166,21 @@ def _venue_phrase(event: dict) -> str:
 
 
 def build_event_comment(event: dict) -> str:
-    """Create one short Russian comment; never replace the original title."""
-    title = normalize_event_title(event.get("title", ""))
-    source_description = _short_source_description(event.get("description", ""))
+    """Create a short Russian comment from source context, never from the title.
 
-    # Translate only the compact summary, never the title stored in the event.
-    summary_input = title
-    if source_description:
-        summary_input = f"{title}. {source_description}"
-    translated = translate_to_russian(summary_input, max_chars=450)
+    The title is an identity-bearing source field and must never be translated
+    into the stored description. This keeps the original event wording intact
+    and prevents the description from becoming a hidden translation layer for
+    deduplication.
+    """
+    source_description = _short_source_description(event.get("description", ""))
+    translated = translate_to_russian(source_description, max_chars=450)
     translated = re.sub(r"\s+", " ", translated).strip()
 
     venue = _venue_phrase(event)
     if venue and venue.casefold() not in translated.casefold():
         translated = f"{translated} {venue}".strip()
 
-    # Keep the comment compact enough for both list and detail views.
     if len(translated) > 260:
         translated = re.split(r"(?<=[.!?])\s+", translated, maxsplit=1)[0].strip()
     return translated[:280].rstrip()
