@@ -382,7 +382,7 @@ def _event_semantic_score(event: dict) -> float:
     return score
 
 
-def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
+def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | None = None):
     """Find the same real-world event across languages and source formatting."""
     from difflib import SequenceMatcher
     import re
@@ -407,6 +407,8 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
     best_score = 0.0
 
     for row in rows:
+        if exclude_id is not None and row["id"] == exclude_id:
+            continue
         other_tokens = _identity_tokens(row["title"])
         if not other_tokens:
             continue
@@ -530,7 +532,7 @@ def deduplicate_events() -> int:
             current = conn.execute("SELECT * FROM events WHERE id = ?", (row["id"],)).fetchone()
             if not current:
                 continue
-            match = _find_fuzzy_event(conn, dict(current))
+            match = _find_fuzzy_event(conn, dict(current), exclude_id=current["id"])
             if match and match["id"] != current["id"]:
                 keeper, duplicate = (
                     (current, match)
