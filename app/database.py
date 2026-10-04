@@ -245,7 +245,7 @@ def upsert_events(events: list[dict]) -> int:
                     "SELECT * FROM events WHERE content_hash = ? LIMIT 1",
                     (event.get("content_hash"),),
                 ).fetchone()
-            match = existing or by_hash or _find_matching_event(conn, event)
+            # Prefer an exact content-hash match over a looser source/date match.\n            # Otherwise updating the looser match can create a duplicate hash.\n            match = by_hash or existing or _find_matching_event(conn, event)
 
             values = (
                 event.get("title", ""),
