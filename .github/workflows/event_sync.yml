@@ -40,6 +40,11 @@ jobs:
         run: |
           python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
 
+      - name: Verify event database
+        if: always()
+        run: |
+          python -c "import sqlite3; conn=sqlite3.connect('events.db'); rows=conn.execute(\"SELECT source_url, date, title FROM events WHERE source_url IN ('https://musichall.cy/','https://livemusiczone.fun/','https://www.soldoutticketbox.com/en/home') AND date >= date('now') ORDER BY date, time, title LIMIT 100\").fetchall(); print('STORED_TARGET_EVENTS |', len(rows)); [print(f'STORED | {r[0]} | {r[1]} | {r[2]}') for r in rows]"
+
       - name: Persist database
         if: always()
         run: |
