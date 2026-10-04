@@ -46,20 +46,34 @@ def send_message(
     return (result.get("result") or {}).get("message_id")
 
 
-def clear_reply_keyboard(token: str, chat_id: int) -> None:
-    """Remove a legacy persistent ReplyKeyboard without leaving a visible message."""
+def send_navigation_message(
+    token: str,
+    chat_id: int,
+    text: str,
+    reply_markup: dict | None = None,
+    parse_mode: str | None = "HTML",
+) -> int | None:
+    """Send one visible message while migrating old ReplyKeyboards to inline UI."""
     message_id = send_message(
         token,
         chat_id,
-        "\u2060",
+        text,
         {"remove_keyboard": True},
-        parse_mode=None,
+        parse_mode=parse_mode,
     )
-    if message_id is not None:
+    if message_id is not None and reply_markup:
         try:
-            delete_message(token, chat_id, message_id)
+            edit_message(
+                token,
+                chat_id,
+                message_id,
+                text,
+                reply_markup,
+                parse_mode=parse_mode,
+            )
         except Exception as exc:
-            print(f"Telegram reply-keyboard cleanup failed: {exc}", file=sys.stderr)
+            print(f"Telegram inline-keyboard migration failed: {exc}", file=sys.stderr)
+    return message_id
 
 
 def edit_message(
@@ -196,12 +210,6 @@ def poll_once(token: str) -> bool:
                         f"text_len={len(reply_text or '')}"
                     )
                     if reply_chat_id is not None:
-                        # Remove the legacy persistent ReplyKeyboard on the first
-                        # interaction after the UI migration. Telegram stores that
-                        # keyboard at chat level, so editing the inline message
-                        # alone cannot remove it.
-                        clear_reply_keyboard(token, reply_chat_id)
-
                         # Navigation callbacks replace the current bot message.
                         # This keeps Today/Week/categories/events as one clean view
                         # instead of creating a second message on every click.
@@ -306,8 +314,7 @@ def poll_once(token: str) -> bool:
                                 # the normal confirmation together with the sync result.
                                 # Remove the legacy reply keyboard before the
                                 # one visible source-check message is shown.
-                                clear_reply_keyboard(token, chat_id)
-                                check_message_id = send_message(
+                                check_message_id = send_navigation_message(
                                     token,
                                     chat_id,
                                     "🔎 Источник добавлен. Проверяю его прямо сейчас…",
@@ -332,11 +339,15 @@ def poll_once(token: str) -> bool:
                                         print(f"Telegram source-sync edit failed: {exc}", file=sys.stderr)
                                 continue
 
-                            # Always clear the old persistent ReplyKeyboard
-                            # before sending the real response. This is silent and does
-                            # not generate an incoming update for the bot.
-                            clear_reply_keyboard(token, chat_id)
-                            sent_id = send_message(token, chat_id, reply_text, keyboard)
+                            # Send exactly one visible response. Remove any legacy
+                            # ReplyKeyboard on that same message, then replace its
+                            # markup with the inline keyboard.
+                            sent_id = send_navigation_message(
+                                token,
+                                chat_id,
+                                reply_text,
+                                keyboard,
+                            )
                             print(
                                 f"Telegram response sent: chat_id={chat_id} "
                                 f"message_id={sent_id}"
