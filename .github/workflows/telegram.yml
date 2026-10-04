@@ -3,6 +3,8 @@ name: Telegram bot
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - ".github/workflows/telegram.yml"
   workflow_dispatch:
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
@@ -34,7 +36,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run Telegram worker
+      - name: Debug event sources
+        run: |
+          python -c "from app.database import list_sources; [(print(f\"SOURCE | {s['name']} | {s['type']} | enabled={s['enabled']} | {s['url']}\")) for s in list_sources()]"
+
+      - name: Sync events
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.telegram_worker
@@ -48,7 +54,7 @@ jobs:
           python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
 
       - name: Save database and Telegram offset
-        if: always() && github.event_name != 'push'
+        if: always()
         run: |
           mkdir -p /tmp/stayalive-state
           if [ -f events.db ]; then
