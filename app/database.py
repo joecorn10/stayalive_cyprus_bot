@@ -270,6 +270,19 @@ def _event_key(event: dict) -> tuple:
     )
 
 
+def _canonical_title_for_identity(value: str) -> str:
+    import re
+    value = str(value or "").casefold()
+    value = re.split(
+        r"\s+(?=(?:location|tickets?|register|registration|more info|price|doors?\s+open|we meet|bring your|в программе|группа|зарегистрироваться|получить\s+стартовый)\b)",
+        value,
+        maxsplit=1,
+        flags=re.I,
+    )[0]
+    value = re.sub(r"[^a-z0-9а-яё]+", " ", value, flags=re.I)
+    return " ".join(value.split())
+
+
 def _find_matching_event(conn: sqlite3.Connection, event: dict):
     key = _event_key(event)
     rows = conn.execute(
@@ -283,6 +296,69 @@ def _find_matching_event(conn: sqlite3.Connection, event: dict):
         if _event_key(dict(row)) == key:
             return row
     return None
+
+
+def _find_fuzzy_event(conn: sqlite3.Connection, event: dict):
+    """Find the same real-world event when sources format its title differently."""
+    from difflib import SequenceMatcher
+
+    title = _canonical_title_for_identity(event.get("title", ""))
+    if not title:
+        return None
+
+    city = _canonical_title_for_identity(event.get("city", ""))
+    venue = _canonical_title_for_identity(event.get("venue", ""))
+    time = _canonical_title_for_identity(event.get("time", ""))
+
+    rows = conn.execute(
+        """SELECT * FROM events
+           WHERE date <= ? AND COALESCE(end_date, date) >= ?
+           ORDER BY id""",
+        (event.get("end_date") or event.get("date", ""), event.get("date", "")),
+    ).fetchall()
+
+    title_tokens = set(title.split())
+    generic = {"event", "events", "вечеринка", "party", "концерт", "concert", "festival", "фестиваль"}
+    title_specific = title_tokens - generic
+
+    best = None
+    best_score = 0.0
+
+    for row in rows:
+        other = _canonical_title_for_identity(row["title"])
+        if not other:
+            continue
+        other_tokens = set(other.split())
+        specific_other = other_tokens - generic
+        if len(title_specific) < 2 or len(specific_other) < 2:
+            continue
+
+        overlap = len(title_specific & specific_other) / max(1, min(len(title_specific), len(specific_other)))
+        similarity = SequenceMatcher(None, title, other).ratio()
+
+        row_city = _canonical_title_for_identity(row["city"])
+        row_venue = _canonical_title_for_identity(row["venue"])
+        row_time = _canonical_title_for_identity(row["time"])
+
+        if city and row_city and city != row_city:
+            continue
+        if venue and row_venue and venue != row_venue:
+            continue
+
+        context = 0.0
+        if time and row_time and time == row_time:
+            context += 0.10
+        if venue and row_venue and venue == row_venue:
+            context += 0.12
+        if city and row_city and city == row_city:
+            context += 0.06
+
+        score = max(overlap, similarity) + context
+        if score > best_score and (overlap >= 0.78 or similarity >= 0.88):
+            best_score = score
+            best = row
+
+    return best
 
 
 def upsert_events(events: list[dict]) -> int:
@@ -334,7 +410,7 @@ def upsert_events(events: list[dict]) -> int:
                 ).fetchone()
             # Prefer an exact content-hash match over a looser source/date match.
             # Otherwise updating the looser match can create a duplicate hash.
-            match = by_hash or existing or _find_matching_event(conn, event)
+            match = by_hash or existing or _find_matching_event(conn, event) or _find_fuzzy_event(conn, event)
 
             values = (
                 event.get("title", ""),
