@@ -112,7 +112,18 @@ def _process_update(update: dict) -> None:
                         (message.get("chat") or {}).get("id"),
                         message_id,
                         "⏳ <b>Загружаю результаты…</b>\n\nОбновляю источники и собираю события.",
-                        None,
+                        {
+                            "inline_keyboard": [
+                                [
+                                    {"text": "📅 Сегодня", "callback_data": "main:today"},
+                                    {"text": "🗓 На этой неделе", "callback_data": "main:week"},
+                                ],
+                                [
+                                    {"text": "📚 Источники", "callback_data": "main:sources"},
+                                    {"text": "➕ Добавить источник", "callback_data": "main:add"},
+                                ],
+                            ]
+                        },
                         parse_mode="HTML",
                     )
                 except Exception as exc:
