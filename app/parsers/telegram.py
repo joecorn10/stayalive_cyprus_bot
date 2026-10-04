@@ -44,11 +44,14 @@ class TelegramParser(EventParser):
                 events.extend(_parse_cyproplan(soup, self.url))
             return _dedupe_events(events)
 
-        preview_url = f"https://t.me/s/{self.channel}"
-        response = requests.get(preview_url, timeout=20, headers=HEADERS)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        return _parse_generic(soup, self.url)
+        # Generic public channels can also contain a long stream of event
+        # announcements. Crawl several Telegram preview pages instead of
+        # looking only at the newest page.
+        soups = _fetch_channel_pages(self.channel, pages=6)
+        events = []
+        for soup in soups:
+            events.extend(_parse_generic(soup, self.url))
+        return _dedupe_events(events)
 
 
 def _fetch_channel_pages(channel: str, pages: int = 6):
