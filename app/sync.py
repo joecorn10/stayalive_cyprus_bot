@@ -192,6 +192,15 @@ def classify_event(event: dict) -> str:
             return ranked[0][1]
         return best_category
 
+    # Strong nightlife language in the event description should override
+    # generic music labels emitted by parsers (especially ETKO/Telegram).
+    # "music" is often merely contextual, while party/club/DJ/techno language
+    # is a direct signal that the event belongs in Nightlife.
+    if not title_scores:
+        nightlife_pattern = dict(CATEGORY_RULES)["🪩 Nightlife"]
+        if nightlife_pattern.search(description):
+            return "🪩 Nightlife"
+
     # Cyprus Underground is a nightlife source, but source provenance alone
     # must not force every listing into Nightlife.
     if "cyprusunderground.com.cy" in source_url:
