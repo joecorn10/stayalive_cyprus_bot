@@ -241,7 +241,10 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
             )
             continue
 
-        raw_posts = profile.get("latestPosts") or []
+        # Apify normally returns a profile row with latestPosts, but some actor versions return post rows directly.
+        raw_posts = profile.get("latestPosts") or profile.get("latest_posts") or []
+        if not raw_posts and (profile.get("caption") or profile.get("text") or profile.get("description")):
+            raw_posts = [profile]
         if isinstance(raw_posts, dict):
             raw_posts = [raw_posts]
 
@@ -259,6 +262,7 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
                 item.get("url")
                 or item.get("postUrl")
                 or item.get("permalink")
+                or item.get("shortcode")
                 or item.get("shortCode")
                 or profile_url
             )
@@ -267,6 +271,7 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
 
             date_value = (
                 item.get("timestamp")
+                or item.get("taken_at_timestamp")
                 or item.get("takenAtTimestamp")
                 or item.get("takenAt")
                 or item.get("publishedAt")
