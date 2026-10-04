@@ -292,6 +292,7 @@ def _identity_text(value: str) -> str:
         (r"семейн(?:ый|ая|ое|ых|ого|ому|ым|ыми)?", "family"),
         (r"праздник(?:а|у|ом|е|и|ов|ах)?", "celebration"),
         (r"день", "day"),
+        (r"вечер(?:а|у|ом|е|и|ов|ах)?", "night"),
         (r"ноч(?:ь|и|ью|ей|ами)?", "night"),
     )
     for pattern, replacement in replacements:
@@ -318,7 +319,7 @@ def _identity_text(value: str) -> str:
 _IDENTITY_GENERIC = {
     "a", "an", "and", "at", "by", "for", "from", "in", "of", "on", "the", "to",
     "this", "with", "event", "events", "program", "programme", "schedule",
-    "concert", "festival", "party", "night", "day", "celebration",
+    "concert", "festival", "party", "night", "day", "celebration", "na",
 }
 
 
