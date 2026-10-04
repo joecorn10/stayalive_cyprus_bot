@@ -1,6 +1,8 @@
 name: Telegram bot
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
@@ -16,6 +18,7 @@ concurrency:
 
 jobs:
   bot:
+    if: github.event_name != 'push' || startsWith(github.event.head_commit.message, 'fix: trigger event sync now')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
