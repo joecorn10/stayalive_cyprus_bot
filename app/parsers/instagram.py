@@ -114,7 +114,10 @@ class InstagramParser(EventParser):
             "city": _find_city(text),
             "price": _find_price(text),
             "ticket_url": post_url or self.url,
-            "source_url": post_url or self.url,
+            # Keep the registered profile as source provenance; the post itself
+            # is the ticket/details link. This also lets event_sources connect
+            # reliably to the canonical Instagram source.
+            "source_url": self.url,
             "image_url": "",
             "category": _find_category(text),
         }
