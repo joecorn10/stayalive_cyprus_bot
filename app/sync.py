@@ -5,7 +5,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import get_source_by_url, init_db, list_sources, upsert_events
+from app.database import deduplicate_exact_events, get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
@@ -219,6 +219,9 @@ def recategorize_existing_events() -> int:
         rows = conn.execute("SELECT * FROM events").fetchall()
         for row in rows:
             event = dict(row)
+            legacy_category = canonical_category(row["category"] or "")
+            if legacy_category:
+                event["category"] = legacy_category
             category = classify_event(event)
             if category != (row["category"] or ""):
                 conn.execute(
@@ -337,6 +340,10 @@ def sync_all() -> int:
     recategorized = recategorize_existing_events()
     if recategorized:
         logger.info("Reclassified %s existing events", recategorized)
+
+    deduplicated = deduplicate_exact_events()
+    if deduplicated:
+        logger.info("Merged %s exact duplicate events", deduplicated)
 
     return total
 
