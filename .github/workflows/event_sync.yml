@@ -3,6 +3,13 @@ name: Event sync
 on:
   schedule:
     - cron: "*/10 * * * *"
+  push:
+    paths:
+      - "app/database.py"
+      - "app/sync.py"
+      - "app/translator.py"
+      - "app/parsers/**"
+      - ".github/workflows/event_sync.yml"
   workflow_dispatch:
 
 permissions:
