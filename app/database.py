@@ -385,34 +385,50 @@ def deduplicate_exact_events() -> int:
     """Merge exact cross-source copies while preserving source provenance."""
     import re
 
-    def key(row):
-        title = " ".join(
-            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["title"] or "").lower(), flags=re.I).split()
+    def normalize(value):
+        return " ".join(
+            re.sub(r"[^a-z0-9а-яё]+", " ", str(value or "").lower(), flags=re.I).split()
         )
-        venue = " ".join(
-            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["venue"] or "").lower(), flags=re.I).split()
-        )
-        city = " ".join(
-            re.sub(r"[^a-z0-9а-яё]+", " ", str(row["city"] or "").lower(), flags=re.I).split()
-        )
-        return (
-            title,
-            row["date"],
-            str(row["time"] or "").strip().lower(),
-            venue,
-            city,
-        )
+
+    def compatible(a, b):
+        if a["date"] != b["date"]:
+            return False
+
+        time_a, time_b = normalize(a["time"]), normalize(b["time"])
+        if time_a and time_b and time_a != time_b:
+            return False
+
+        venue_a, venue_b = normalize(a["venue"]), normalize(b["venue"])
+        if venue_a and venue_b and venue_a != venue_b:
+            return False
+
+        city_a, city_b = normalize(a["city"]), normalize(b["city"])
+        if city_a and city_b and city_a != city_b:
+            return False
+
+        return True
 
     removed = 0
     with get_connection() as conn:
         rows = conn.execute("SELECT * FROM events ORDER BY id").fetchall()
-        keepers = {}
+        keepers = []
 
         for row in rows:
-            event_key = key(row)
-            keeper_id = keepers.get(event_key)
-            if keeper_id is None:
-                keepers[event_key] = row["id"]
+            title = normalize(row["title"])
+            if not title:
+                continue
+
+            keeper = next(
+                (
+                    candidate
+                    for candidate in keepers
+                    if normalize(candidate["title"]) == title
+                    and compatible(candidate, row)
+                ),
+                None,
+            )
+            if keeper is None:
+                keepers.append(row)
                 continue
 
             # Preserve every source attached to the duplicate before removing it.
@@ -421,7 +437,7 @@ def deduplicate_exact_events() -> int:
                    SELECT ?, source_id, source_url
                    FROM event_sources
                    WHERE event_id = ?""",
-                (keeper_id, row["id"]),
+                (keeper["id"], row["id"]),
             )
             conn.execute("DELETE FROM event_sources WHERE event_id = ?", (row["id"],))
             conn.execute("DELETE FROM events WHERE id = ?", (row["id"],))
@@ -430,7 +446,6 @@ def deduplicate_exact_events() -> int:
         conn.commit()
 
     return removed
-
 
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     init_db()
