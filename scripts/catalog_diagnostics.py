@@ -108,54 +108,6 @@ def main():
         else:
             semantic_seen[semantic_key] = source
 
-    today_rows = conn.execute(
-        """SELECT e.id, e.title, e.date, e.end_date, e.time, e.venue, e.city,
-                  e.category, e.categories,
-                  GROUP_CONCAT(DISTINCT s.name) AS sources
-           FROM events e
-           LEFT JOIN event_sources es ON es.event_id = e.id
-           LEFT JOIN sources s ON s.id = es.source_id
-           WHERE e.date <= date('now')
-             AND COALESCE(e.end_date, e.date) >= date('now')
-           GROUP BY e.id
-           ORDER BY e.time, e.id"""
-    ).fetchall()
-    # Raw Telegram parser diagnostics: show today's source events before DB
-    # matching/deduplication so parser/date extraction can be distinguished
-    # from database/category problems.
-    try:
-        from app.database import list_sources
-        from app.parsers.telegram import TelegramParser
-        for source in list_sources():
-            if not source["enabled"] or source["type"] != "Telegram":
-                continue
-            try:
-                raw_events = TelegramParser(source["url"]).parse()
-                raw_today = [
-                    event for event in raw_events
-                    if str(event.get("date", "")) <= __import__("datetime").date.today().isoformat()
-                    and str(event.get("end_date") or event.get("date", "")) >= __import__("datetime").date.today().isoformat()
-                ]
-                print(f"RAW_TELEGRAM_TODAY | {source['name']} | {len(raw_today)} events")
-                for event in raw_today[:50]:
-                    print(
-                        f"RAW_TELEGRAM_EVENT | {source['name']} | "
-                        f"{event.get('date')}->{event.get('end_date')} | "
-                        f"{event.get('category')} | {event.get('title')} | "
-                        f"{event.get('description','')[:300]}"
-                    )
-            except Exception as exc:
-                print(f"RAW_TELEGRAM_ERROR | {source['name']} | {exc}")
-    
-    print("TODAY_EVENT_COUNT", len(today_rows))
-    for row in today_rows:
-        print(
-            f"TODAY_EVENT | id={row['id']} | {row['date']}->{row['end_date']} | "
-            f"{row['category']} | categories={row['categories']} | "
-            f"title={row['title']} | venue={row['venue']} | city={row['city']} | "
-            f"sources={row['sources']}"
-        )
-
     print("CATEGORY_WITH_MULTIPLE_NAMES")
     category_titles = defaultdict(Counter)
     for row in rows:
