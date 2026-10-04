@@ -16,11 +16,10 @@ from app.database import (
     list_recent_events,
     list_sources,
     set_chat_state,
-    recategorize_existing_events,
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
-from app.sync import canonical_category, sync_source_by_url
+from app.sync import canonical_category, recategorize_existing_events, sync_source_by_url
 
 WELCOME_TEXT = (
     "👋 Добро пожаловать в Stay Alive Cyprus!\n\n"
