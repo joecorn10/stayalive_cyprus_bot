@@ -57,6 +57,11 @@ CATEGORY_ALIASES = {
     "family": "👨‍👩‍👧 Семья",
     "events": "",
     "события": "",
+    "nightlife": "🪩 Nightlife",
+    "вечеринки": "🪩 Nightlife",
+    "вечеринка": "🪩 Nightlife",
+    "parties": "🪩 Nightlife",
+    "party": "🪩 Nightlife",
 }
 
 CATEGORY_LABELS = {
