@@ -70,3 +70,32 @@ def test_database_slot_match_can_replace_old_translated_title():
     # Regression is covered at the database level by the unique source/date/time/venue
     # slot fallback used when source URLs change between social posts.
     assert "JOIN event_sources es ON es.event_id = e.id" in open("app/database.py").read()
+
+
+def test_identity_uses_russian_comment_for_non_russian_titles():
+    from app.database import _identity_title_tokens
+
+    russian = {
+        "title": "ПРОСТО ЛУЧШИЙ",
+        "description": "Просто лучший вечер в Music Hall",
+    }
+    english = {
+        "title": "SIMPLY THE BEST",
+        "description": "Просто лучший вечер в Music Hall",
+    }
+
+    assert _identity_title_tokens(russian) == _identity_title_tokens(english)
+
+
+def test_identity_does_not_translate_or_mutate_title():
+    from app.database import _identity_title_tokens
+
+    event = {
+        "title": "SIMPLY THE BEST",
+        "description": "Просто лучший вечер в Music Hall",
+    }
+    before = event["title"]
+
+    _identity_title_tokens(event)
+
+    assert event["title"] == before
