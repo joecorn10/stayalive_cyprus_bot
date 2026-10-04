@@ -16,6 +16,7 @@ from app.database import (
     list_recent_events,
     list_sources,
     set_chat_state,
+    recategorize_existing_events,
 )
 from app.keyboards import back_keyboard, category_keyboard, event_keyboard, main_menu, navigation_keyboard
 from app.source_detector import detect_source, normalize_url
@@ -344,6 +345,16 @@ def handle_callback(callback: dict) -> tuple[int | None, str, dict | None]:
                 category = legacy_map.get(slug)
         if not category:
             return chat_id, "Неизвестное направление.", None
+        # Re-apply the current semantic category rules before opening a
+        # category. This is important after a parser/category-rule update:
+        # existing events should move into Nightlife/Festivals immediately,
+        # without waiting for the next full sync.
+        try:
+            changed = recategorize_existing_events()
+            if changed:
+                print(f"Telegram category refresh: reclassified {changed} events")
+        except Exception as exc:
+            print(f"Telegram category reclassification failed: {exc}")
         today = cyprus_today()
         end = today if period == "today" else today + timedelta(days=6)
         events = list_events(today.isoformat(), end.isoformat())
