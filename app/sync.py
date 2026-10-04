@@ -1,4 +1,6 @@
-"""Event synchronization jobs."""\n\n# Scheduled sync also performs semantic category and duplicate cleanup.
+"""Event synchronization jobs."""
+
+# Scheduled sync also performs semantic category and duplicate cleanup.
 
 import hashlib
 import re
