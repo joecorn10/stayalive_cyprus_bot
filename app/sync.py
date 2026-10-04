@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.database import get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
+from app.parsers.cyprus_underground import CyprusUndergroundParser
 from app.parsers.etko import EtkoParser
 from app.parsers.website import WebsiteParser
 from app.parsers.aggregator import AggregatorParser
@@ -170,6 +171,8 @@ def _parse_source(source) -> list[dict]:
         return CyproplanParser().parse()
     if name == "SoldOut TicketBox":
         return SoldOutParser(source["url"]).parse()
+    if name == "Cyprus Underground":
+        return CyprusUndergroundParser(source["url"]).parse()
     if name in {"Music Hall", "Live Music Zone"}:
         return MusicSiteParser(source["url"]).parse()
     if name == "EventOr":
