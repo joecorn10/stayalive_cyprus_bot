@@ -119,9 +119,9 @@ def test_title_category_beats_noisy_description():
         "venue": "",
     }
 
-    assert classify_event(picnic) == "🏃 Спорт и outdoor"
-    assert classify_event(theatre) == "🎭 Театр и кино"
-    assert classify_event(party) == "🪩 Nightlife"
+    assert classify_event(picnic) == ["🏃 Спорт и outdoor"]
+    assert classify_event(theatre) == ["🎭 Театр и кино"]
+    assert classify_event(party) == ["🪩 Nightlife"]
 
 
 def test_semantic_dedupe_ignores_venue_formatting_when_title_is_exact():
