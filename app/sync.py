@@ -104,7 +104,7 @@ CATEGORY_RULES = (
     ("🎭 Comedy", re.compile(r"\b(stand[- ]?up|comedy|comedian|open mic|стендап|стендапер|комед\w*|комик\w*|юмор)\b", re.I)),
     ("🧑‍🏫 Воркшопы", re.compile(r"\b(workshop|masterclass|master class|class|seminar|lecture|course|мастер[- ]?класс|воркшоп|семинар|лекци|курс|занят)\b", re.I)),
     ("🎪 Фестивали", re.compile(r"\b(festival|фестиваль|карнавал|carnival|fest)\b", re.I)),
-    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|trek|trekking|picnic|nature|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|пикник|природ|треккинг|йог|фитнес|футбол|баскетбол|велопрогул|спорт)\b", re.I)),
+    ("🏃 Спорт и outdoor", re.compile(r"\b(run|running|hike|hiking|trek|trekking|picnic|nature|yoga|fitness|football|basketball|cycling|sport|outdoor|марафон|бег|поход|пикник\w*|природ\w*|треккинг\w*|йог\w*|фитнес\w*|футбол\w*|баскетбол\w*|велопрогул\w*|спорт\w*)\b", re.I)),
     ("🍷 Еда и вино", re.compile(r"\b(wine|tasting|dinner|food|chef|restaurant|winery|beer|cocktail|дегустац|вино|ужин|еда|шеф|ресторан|вин|пиво|коктейл|гастроном)\b", re.I)),
     ("🎨 Искусство", re.compile(r"\b(art|gallery|exhibition|opening|museum|painting|sculpture|photo|искусств|выстав|галере|музе|живопис|скульптур|фото)\b", re.I)),
     ("🛍 Маркеты и шопинг", re.compile(r"\b(market|bazaar|flea|pop[- ]?up|shopping|makers|craft fair|маркет|базар|ярмарк|барахол|шопинг|дизайн[- ]?маркет)\b", re.I)),
