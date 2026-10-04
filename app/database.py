@@ -112,6 +112,7 @@ def init_db() -> None:
             ("Music Hall", "https://musichall.cy/", "Website", "Music Hall Limassol events and concerts"),
             ("Music Hall Telegram", "https://t.me/livemusichall", "Telegram", "Music Hall Limassol live programme and ticket announcements"),
             ("Live Music Zone", "https://livemusiczone.fun/", "Website", "Live music events and tickets in Cyprus"),
+            ("Cyprus Underground", "https://www.cyprusunderground.com.cy/", "Website", "Electronic music, club nights, techno, house and rave events across Cyprus"),
             ("Facebook Cyprus Discovery", "site:facebook.com/events Cyprus (Limassol OR Nicosia OR Larnaca OR Paphos) event", "FacebookDiscovery", "Public Facebook events discovered through search indexing"),
         ]
         conn.executemany(
