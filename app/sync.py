@@ -237,10 +237,16 @@ def _normalize(events: list[dict]) -> list[dict]:
     normalized = []
     for event in events:
         normalize_event_dates(event)
-        translate_event(event)
+
+        # Classify from the original source fields before translation.
+        # Translation is presentation-only; it must never remove semantic
+        # signals such as DJ/techno/club/rave from the classifier input.
         categories = classify_event(event)
         event["categories"] = json.dumps(categories, ensure_ascii=False)
         event["category"] = categories[0] if categories else "✨ Другое"
+
+        # Only after classification, generate the Russian presentation comment.
+        translate_event(event)
         raw = "|".join(str(event.get(key, "")).strip().lower() for key in ("title","date","end_date","time","venue","city"))
         event["content_hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         normalized.append(event)
