@@ -530,9 +530,35 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     return best
 
 
+def _merge_event_categories(*events) -> tuple[str, str]:
+    """Merge categories from every source instead of letting the last source win."""
+    values = []
+    for event in events:
+        if not event:
+            continue
+        raw = event.get("categories", "") if hasattr(event, "get") else ""
+        try:
+            parsed = json.loads(raw) if raw else []
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = []
+        if not isinstance(parsed, list):
+            parsed = []
+        for value in parsed:
+            category = canonical_category(value)
+            if category and category not in values:
+                values.append(category)
+        category = canonical_category(event.get("category", "")) if hasattr(event, "get") else ""
+        if category and category not in values:
+            values.append(category)
+    if not values:
+        values = ["✨ Другое"]
+    return values[0], json.dumps(values, ensure_ascii=False)
+
+
 def _merge_event_rows(conn: sqlite3.Connection, keeper, duplicate) -> None:
     keeper_dict = dict(keeper)
     duplicate_dict = dict(duplicate)
+    merged_category, merged_categories = _merge_event_categories(keeper_dict, duplicate_dict)
 
     def choose(field: str) -> str:
         a = str(keeper_dict.get(field) or "").strip()
@@ -548,19 +574,21 @@ def _merge_event_rows(conn: sqlite3.Connection, keeper, duplicate) -> None:
         return a
 
     merged = dict(keeper_dict)
-    for field in ("title", "description", "category", "date", "end_date", "time", "venue", "city", "price", "ticket_url", "source_url", "image_url"):
+    for field in ("title", "description", "date", "end_date", "time", "venue", "city", "price", "ticket_url", "source_url", "image_url"):
         merged[field] = choose(field)
+    merged["category"] = merged_category
+    merged["categories"] = merged_categories
 
     merged_identity = _identity_key(merged)
 
     conn.execute(
         """UPDATE events SET
-           title=?, description=?, category=?, date=?, end_date=?, time=?,
+           title=?, description=?, category=?, categories=?, date=?, end_date=?, time=?,
            venue=?, city=?, price=?, ticket_url=?, source_url=?, image_url=?,
            content_hash=?, identity_key=?, last_seen_at=CURRENT_TIMESTAMP
            WHERE id=?""",
         (
-            merged["title"], merged["description"], merged["category"], merged["date"],
+            merged["title"], merged["description"], merged["category"], merged["categories"], merged["date"],
             merged["end_date"], merged["time"], merged["venue"], merged["city"],
             merged["price"], merged["ticket_url"], merged["source_url"], merged["image_url"],
             keeper_dict.get("content_hash") or duplicate_dict.get("content_hash"),
@@ -698,11 +726,26 @@ def upsert_events(events: list[dict]) -> int:
             match = by_hash or existing or _find_matching_event(conn, event) or _find_fuzzy_event(conn, event)
             identity_key = _identity_key(event)
 
+            if match:
+                merged_category, merged_categories = _merge_event_categories(dict(match), event)
+            else:
+                merged_category = canonical_category(event.get("category", "")) or "✨ Другое"
+                try:
+                    parsed_categories = json.loads(event.get("categories", "") or "[]")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    parsed_categories = []
+                if not isinstance(parsed_categories, list):
+                    parsed_categories = []
+                parsed_categories = [canonical_category(value) for value in parsed_categories if canonical_category(value)]
+                if merged_category not in parsed_categories:
+                    parsed_categories.insert(0, merged_category)
+                merged_categories = json.dumps(list(dict.fromkeys(parsed_categories)), ensure_ascii=False)
+
             values = (
                 event.get("title", ""),
                 event.get("description", ""),
-                event.get("category", ""),
-                event.get("categories", ""),
+                merged_category,
+                merged_categories,
                 event.get("date", ""),
                 event.get("end_date") or event.get("date", ""),
                 event.get("time", ""),
