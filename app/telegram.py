@@ -46,6 +46,22 @@ def send_message(
     return (result.get("result") or {}).get("message_id")
 
 
+def clear_reply_keyboard(token: str, chat_id: int) -> None:
+    """Remove a legacy persistent ReplyKeyboard without leaving a visible message."""
+    message_id = send_message(
+        token,
+        chat_id,
+        "\u2060",
+        {"remove_keyboard": True},
+        parse_mode=None,
+    )
+    if message_id is not None:
+        try:
+            delete_message(token, chat_id, message_id)
+        except Exception as exc:
+            print(f"Telegram reply-keyboard cleanup failed: {exc}", file=sys.stderr)
+
+
 def edit_message(
     token: str,
     chat_id: int,
@@ -83,7 +99,7 @@ def save_offset(offset: int) -> None:
 
 
 def configure_telegram_menu(token: str) -> None:
-    """Configure the bot profile while keeping the persistent reply keyboard as navigation."""
+    """Configure the bot profile and keep navigation inside inline keyboards."""
     api_call(
         token,
         "setMyDescription",
@@ -180,6 +196,12 @@ def poll_once(token: str) -> bool:
                         f"text_len={len(reply_text or '')}"
                     )
                     if reply_chat_id is not None:
+                        # Remove the legacy persistent ReplyKeyboard on the first
+                        # interaction after the UI migration. Telegram stores that
+                        # keyboard at chat level, so editing the inline message
+                        # alone cannot remove it.
+                        clear_reply_keyboard(token, reply_chat_id)
+
                         # Navigation callbacks replace the current bot message.
                         # This keeps Today/Week/categories/events as one clean view
                         # instead of creating a second message on every click.
@@ -307,6 +329,10 @@ def poll_once(token: str) -> bool:
                                         print(f"Telegram source-sync edit failed: {exc}", file=sys.stderr)
                                 continue
 
+                            # Always clear the old persistent ReplyKeyboard
+                            # before sending the real response. This is silent and does
+                            # not generate an incoming update for the bot.
+                            clear_reply_keyboard(token, chat_id)
                             sent_id = send_message(token, chat_id, reply_text, keyboard)
                             print(
                                 f"Telegram response sent: chat_id={chat_id} "
