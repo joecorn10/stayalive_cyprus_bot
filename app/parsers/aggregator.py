@@ -27,7 +27,7 @@ LINK_PATTERNS = {
     "More.com": re.compile(r"^https?://(?:www\.)?more\.com/cy-(?:en|el)/tickets/[^?#]+", re.I),
 }
 
-MAX_PAGES = 10
+MAX_PAGES_PER_DISCOVERY = 6
 
 
 class AggregatorParser(EventParser):
@@ -41,37 +41,47 @@ class AggregatorParser(EventParser):
 
         pages: list[tuple[str, str]] = []
         seen_pages: set[str] = set()
-        queue = list(discovery_urls)
 
-        while queue and len(pages) < MAX_PAGES:
-            page_url = queue.pop(0)
-            if page_url in seen_pages:
-                continue
-            seen_pages.add(page_url)
+        # Crawl each discovery surface independently. For Cyprus.BZ the
+        # /events/today surface needs its own page budget; otherwise the root
+        # catalogue can consume the global queue before today's pages load.
+        for discovery_url in discovery_urls:
+            queue = [discovery_url]
+            local_seen: set[str] = set()
+            local_pages = 0
 
-            try:
-                response = requests.get(page_url, timeout=45, headers=HEADERS)
-                response.raise_for_status()
-            except requests.RequestException as exc:
-                logger.warning("%s fetch failed: %s", self.source_name, exc)
-                continue
+            while queue and local_pages < MAX_PAGES_PER_DISCOVERY:
+                page_url = queue.pop(0)
+                if page_url in seen_pages or page_url in local_seen:
+                    continue
+                local_seen.add(page_url)
+                seen_pages.add(page_url)
 
-            pages.append((page_url, response.text))
-            soup = BeautifulSoup(response.text, "html.parser")
+                try:
+                    response = requests.get(page_url, timeout=45, headers=HEADERS)
+                    response.raise_for_status()
+                except requests.RequestException as exc:
+                    logger.warning("%s fetch failed: %s", self.source_name, exc)
+                    continue
 
-            # Prefer real pagination links when the site exposes them.
-            for link in soup.find_all("a", href=True):
-                href = urljoin(page_url, link["href"]).split("#", 1)[0]
-                if _is_pagination_link(link, href, page_url) and href not in seen_pages:
-                    queue.append(href)
+                pages.append((page_url, response.text))
+                local_pages += 1
+                soup = BeautifulSoup(response.text, "html.parser")
 
-            # Cyprus.BZ can omit pagination controls from server-rendered HTML.
-            # Probe its conventional ?page=N form as a bounded fallback.
-            if self.source_name == "Cyprus.BZ":
-                for page_number in range(2, MAX_PAGES + 1):
-                    href = _page_url(page_url, page_number)
-                    if href not in seen_pages and href not in queue:
+                # Prefer real pagination links when the site exposes them.
+                for link in soup.find_all("a", href=True):
+                    href = urljoin(page_url, link["href"]).split("#", 1)[0]
+                    if _is_pagination_link(link, href, page_url) and href not in seen_pages:
                         queue.append(href)
+
+                # Cyprus.BZ can omit pagination controls from server-rendered
+                # HTML. Probe its conventional ?page=N form as a bounded
+                # fallback, but keep it inside this discovery surface.
+                if self.source_name == "Cyprus.BZ":
+                    for page_number in range(2, MAX_PAGES_PER_DISCOVERY + 1):
+                        href = _page_url(page_url, page_number)
+                        if href not in seen_pages and href not in queue:
+                            queue.append(href)
 
         links = []
         seen_links = set()
