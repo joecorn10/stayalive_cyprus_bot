@@ -186,8 +186,13 @@ def classify_event(event: dict) -> str:
     best_score, best_category, _reason = scores[0]
     if explicit and explicit in CATEGORY_WEIGHTS:
         explicit_score = next((s for s, cat, _ in scores if cat == explicit), 0)
-        if best_category != explicit and best_score < explicit_score + 3:
-            return explicit
+        if best_category != explicit:
+            best_reason = next((reason for score, cat, reason in scores if cat == best_category), "")
+            # A source-level category is useful as a fallback, but it must not
+            # override a clear title signal. This prevents legacy Nightlife
+            # labels from keeping hikes, picnics and festivals in Nightlife.
+            if "title=" not in best_reason and best_score <= explicit_score:
+                return explicit
     return best_category
 
 
