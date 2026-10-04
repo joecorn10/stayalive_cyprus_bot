@@ -506,8 +506,11 @@ def deduplicate_exact_events() -> int:
                 (
                     candidate
                     for candidate in keepers
-                    if normalize(candidate["title"]) == title
-                    and compatible(candidate, row)
+                    if compatible(candidate, row)
+                    and (
+                        normalize(candidate["title"]) == title
+                        or _looks_like_duplicate_event(candidate, row)
+                    )
                 ),
                 None,
             )
