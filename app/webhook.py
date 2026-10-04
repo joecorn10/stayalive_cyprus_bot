@@ -53,6 +53,17 @@ def configure_webhook() -> None:
     try:
         result = api_call(TOKEN, "setWebhook", payload)
         print(f"Telegram webhook configured: {url} result={result}")
+        try:
+            info = api_call(TOKEN, "getWebhookInfo", {})
+            print(
+                "Telegram webhook info: "
+                f"url={(info.get("result") or {}).get("url")!r} "
+                f"pending={(info.get("result") or {}).get("pending_update_count")} "
+                f"last_error={(info.get("result") or {}).get("last_error_message")!r} "
+                f"last_error_at={(info.get("result") or {}).get("last_error_date")}"
+            )
+        except Exception as exc:
+            print(f"Telegram webhook info failed: {exc}")
     except Exception as exc:
         print(f"Telegram webhook setup failed: {exc}")
 
