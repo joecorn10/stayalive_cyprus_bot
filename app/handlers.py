@@ -137,6 +137,9 @@ def format_category_events(category: str, events, period: str) -> tuple[str, dic
             meta.append(f"📍 {str(event['venue'])}")
         if event["price"]:
             meta.append(f"💶 {str(event['price'])}")
+        if event["description"]:
+            comment = " ".join(str(event["description"]).split())
+            lines.append(f"  {escape(comment)}")
         if meta:
             lines.append(" · ".join(meta))
         if event["end_date"] and event["end_date"] != event["date"]:
