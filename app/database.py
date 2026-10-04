@@ -13,6 +13,8 @@ def canonical_source_url(url: str) -> str:
     if not value:
         return value
     parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return value
     host = parsed.netloc.casefold()
     path = parsed.path.rstrip("/")
     if host in {"instagram.com", "www.instagram.com"}:
