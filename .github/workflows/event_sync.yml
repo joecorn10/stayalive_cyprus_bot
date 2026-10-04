@@ -42,7 +42,15 @@ jobs:
       - name: Diagnose catalog quality
         if: always()
         run: |
-          python scripts/catalog_diagnostics.py | tee /tmp/catalog_diagnostics.txt
+          python scripts/catalog_diagnostics.py | tee catalog_diagnostics.txt
+
+      - name: Upload catalog diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-diagnostics-${{ github.run_number }}
+          path: catalog_diagnostics.txt
+          if-no-files-found: warn
 
       - name: Persist database
         if: always()
