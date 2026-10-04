@@ -251,29 +251,11 @@ def poll_once(token: str) -> bool:
                                         parse_mode=None,
                                     )
                         else:
-                            # Event views get an immediate acknowledgement before any
-                            # source refresh. This is important because a slow upstream source
-                            # must never make Telegram look completely dead.
+                            # Event views deliberately send exactly one Telegram message.
+                            # We do not send a progress message and then edit it, because an
+                            # edit can race with worker restarts and result in duplicate replies.
                             needs_sync = text in ("📅 Сегодня", "🗓 На этой неделе")
                             progress_message_id = None
-
-                            if needs_sync:
-                                try:
-                                    progress_message_id = send_message(
-                                        token,
-                                        chat_id,
-                                        "🔎 Обновляю события…\n\nПроверяю свежие данные и сразу покажу результат.",
-                                        parse_mode=None,
-                                    )
-                                    print(
-                                        f"Telegram progress sent: chat_id={chat_id} "
-                                        f"message_id={progress_message_id}"
-                                    )
-                                except Exception as progress_exc:
-                                    print(
-                                        f"Telegram progress message failed: {progress_exc}",
-                                        file=sys.stderr,
-                                    )
 
                             awaiting_source = get_chat_state(chat_id) == "awaiting_source"
                             source_url = normalize_url(text) if awaiting_source else ""
@@ -308,31 +290,11 @@ def poll_once(token: str) -> bool:
                                         print(f"Telegram source-sync edit failed: {exc}", file=sys.stderr)
                                 continue
 
-                            if needs_sync and progress_message_id is not None:
-                                try:
-                                    edit_message(
-                                        token,
-                                        chat_id,
-                                        progress_message_id,
-                                        reply_text,
-                                        keyboard,
-                                        parse_mode=None,
-                                    )
-                                    print(
-                                        f"Telegram progress updated: chat_id={chat_id} "
-                                        f"message_id={progress_message_id}"
-                                    )
-                                except Exception as exc:
-                                    print(
-                                        f"Telegram edit failed; keeping the single progress message: {exc}",
-                                        file=sys.stderr,
-                                    )
-                            else:
-                                sent_id = send_message(token, chat_id, reply_text, keyboard)
-                                print(
-                                    f"Telegram response sent: chat_id={chat_id} "
-                                    f"message_id={sent_id}"
-                                )
+                            sent_id = send_message(token, chat_id, reply_text, keyboard)
+                            print(
+                                f"Telegram response sent: chat_id={chat_id} "
+                                f"message_id={sent_id}"
+                            )
 
         except Exception as exc:
             print(
