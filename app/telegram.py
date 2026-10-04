@@ -53,27 +53,31 @@ def send_navigation_message(
     reply_markup: dict | None = None,
     parse_mode: str | None = "HTML",
 ) -> int | None:
-    """Send one visible message while migrating old ReplyKeyboards to inline UI."""
-    message_id = send_message(
+    """Send the navigation message with the correct Telegram keyboard type.
+
+    Telegram does not allow ReplyKeyboardRemove and InlineKeyboardMarkup on
+    the same message, and a message sent with ReplyKeyboardRemove cannot later
+    be converted with editMessageText. The previous migration tried exactly
+    that and therefore lost the inline buttons. The old ReplyKeyboard is
+    already removed for this chat after the first response, so from now on we
+    send the inline keyboard directly.
+    """
+    if reply_markup:
+        return send_message(
+            token,
+            chat_id,
+            text,
+            reply_markup,
+            parse_mode=parse_mode,
+        )
+
+    return send_message(
         token,
         chat_id,
         text,
         {"remove_keyboard": True},
         parse_mode=parse_mode,
     )
-    if message_id is not None and reply_markup:
-        try:
-            edit_message(
-                token,
-                chat_id,
-                message_id,
-                text,
-                reply_markup,
-                parse_mode=parse_mode,
-            )
-        except Exception as exc:
-            print(f"Telegram inline-keyboard migration failed: {exc}", file=sys.stderr)
-    return message_id
 
 
 def edit_message(
