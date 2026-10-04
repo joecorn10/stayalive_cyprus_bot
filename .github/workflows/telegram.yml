@@ -2,6 +2,11 @@ name: Telegram bot
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "events.db"
+      - "app/**"
+      - ".github/workflows/telegram.yml"
   schedule:
     # Keep a full runner cycle between workers so they do not queue behind
     # dependency installation and state persistence.
