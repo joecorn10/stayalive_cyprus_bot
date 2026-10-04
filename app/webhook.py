@@ -103,15 +103,15 @@ def _process_update(update: dict) -> None:
                     print(f"Telegram callback acknowledgement failed: {exc}")
 
             # Keep the loading state visible on the actual message while the
-            # full source sync runs. handle_callback() performs the sync for
-            # Today/Week and can take several seconds.
+            # catalogue snapshot is being prepared. Today/Week no longer run
+            # source syncs inside the webhook request.
             if loading and message_id:
                 try:
                     edit_message(
                         TOKEN,
                         (message.get("chat") or {}).get("id"),
                         message_id,
-                        "⏳ <b>Загружаю результаты…</b>\n\nОбновляю источники и собираю события.",
+                        "⏳ <b>Загружаю результаты…</b>\n\nБеру актуальные события из каталога.",
                         {
                             "inline_keyboard": [
                                 [
