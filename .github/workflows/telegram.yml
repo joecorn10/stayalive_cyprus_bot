@@ -37,6 +37,14 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
         run: python -m app.telegram_worker
 
+      - name: Sync events
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.CYPRUS_EVENT_TOKEN }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        run: |
+          python -c "from app.sync import sync_all; print('Event sync started'); added = sync_all(); print(f'Event sync finished: {added} new events')"
+
       - name: Save database and Telegram offset
         if: always()
         run: |
