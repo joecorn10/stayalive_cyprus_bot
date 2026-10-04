@@ -50,6 +50,12 @@ def normalize_event_title(title: str) -> str:
     if not value:
         return value
 
+    # Strip poster/catalogue decoration and metadata that should never become
+    # the event name.
+    value = re.sub(r"^[\\s#•·*_~🎉🎶🎵🎧🎸🥳✨🔥📅🪩🎭🎪🏃🍷🎨🛍👨‍👩‍👧]+", "", value).strip()
+    value = re.sub(r"^(?:event|events|what'?s on|upcoming events)\\s*[:|—–-]\\s*", "", value, flags=re.I)
+    value = re.sub(r"\\s+(?:at|@)\\s+[A-Z][A-Za-z0-9 .&'_-]{2,60}$", "", value, flags=re.I)
+
     # Remove common catalogue noise while preserving the actual event name.
     value = re.sub(
         r"^(?:event|events|cyprus underground|cyprus events)\s*[:|—–-]\s*",
