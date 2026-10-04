@@ -120,6 +120,33 @@ def main():
            GROUP BY e.id
            ORDER BY e.time, e.id"""
     ).fetchall()
+    # Raw Telegram parser diagnostics: show today's source events before DB
+    # matching/deduplication so parser/date extraction can be distinguished
+    # from database/category problems.
+    try:
+        from app.database import list_sources
+        from app.parsers.telegram import TelegramParser
+        for source in list_sources():
+            if not source["enabled"] or source["type"] != "Telegram":
+                continue
+            try:
+                raw_events = TelegramParser(source["url"]).parse()
+                raw_today = [
+                    event for event in raw_events
+                    if str(event.get("date", "")) <= __import__("datetime").date.today().isoformat()
+                    and str(event.get("end_date") or event.get("date", "")) >= __import__("datetime").date.today().isoformat()
+                ]
+                print(f"RAW_TELEGRAM_TODAY | {source['name']} | {len(raw_today)} events")
+                for event in raw_today[:50]:
+                    print(
+                        f"RAW_TELEGRAM_EVENT | {source['name']} | "
+                        f"{event.get('date')}->{event.get('end_date')} | "
+                        f"{event.get('category')} | {event.get('title')} | "
+                        f"{event.get('description','')[:300]}"
+                    )
+            except Exception as exc:
+                print(f"RAW_TELEGRAM_ERROR | {source['name']} | {exc}")
+    
     print("TODAY_EVENT_COUNT", len(today_rows))
     for row in today_rows:
         print(
