@@ -354,7 +354,7 @@ def sync_all() -> int:
 
     deduplicated = deduplicate_events()
     if deduplicated:
-        logger.info("Merged %s exact duplicate events", deduplicated)
+        logger.info("Merged %s semantic duplicate events", deduplicated)
 
     return total
 
