@@ -229,9 +229,11 @@ def recategorize_existing_events() -> int:
         rows = conn.execute("SELECT * FROM events").fetchall()
         for row in rows:
             event = dict(row)
-            legacy_category = canonical_category(row["category"] or "")
-            if legacy_category:
-                event["category"] = legacy_category
+            # The stored event category is the result of a previous
+            # classification, not an authoritative source category. Passing it
+            # back into classify_event() makes old Nightlife labels reinforce
+            # themselves forever. Reclassify from the event's actual content.
+            event["category"] = ""
             category = classify_event(event)
             if category != (row["category"] or ""):
                 conn.execute(
