@@ -51,6 +51,12 @@ def test_jazz_titles_match_across_languages():
         time="16:00",
         venue="Rooftop",
     )
+    assert database._identity_tokens(a["title"]) == database._identity_tokens(b["title"]), (
+        database._identity_text(a["title"]),
+        database._identity_text(b["title"]),
+        database._identity_tokens(a["title"]),
+        database._identity_tokens(b["title"]),
+    )
     assert database._identity_key(a) == database._identity_key(b)
 
 
@@ -100,3 +106,4 @@ def test_persistent_dedupe_merges_existing_semantic_duplicates():
         assert database.deduplicate_events() == 1
         with database.get_connection() as conn:
             assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    assert database._identity_key(a) == database._identity_key(b)
