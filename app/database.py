@@ -432,13 +432,23 @@ def _looks_like_duplicate_event(a: sqlite3.Row, b: sqlite3.Row) -> bool:
     from difflib import SequenceMatcher
     import re
 
-    if a["date"] != b["date"]:
-        return False
+    from datetime import date as date_type
 
     def normalize(value):
         return " ".join(
             re.sub(r"[^a-z0-9а-яё]+", " ", str(value or "").lower(), flags=re.I).split()
         )
+
+    # Sources may encode the same festival as one day vs. a date range.
+    try:
+        a_start = date_type.fromisoformat(str(a["date"]))
+        b_start = date_type.fromisoformat(str(b["date"]))
+        a_end = date_type.fromisoformat(str(a["end_date"] or a["date"]))
+        b_end = date_type.fromisoformat(str(b["end_date"] or b["date"]))
+    except (TypeError, ValueError):
+        return False
+    if a_end < b_start or b_end < a_start:
+        return False
 
     # Missing venue/time in one source should not prevent a match, but
     # conflicting values are a strong signal that these are different events.
@@ -475,7 +485,16 @@ def deduplicate_exact_events() -> int:
         )
 
     def compatible(a, b):
-        if a["date"] != b["date"]:
+        from datetime import date as date_type
+
+        try:
+            a_start = date_type.fromisoformat(str(a["date"]))
+            b_start = date_type.fromisoformat(str(b["date"]))
+            a_end = date_type.fromisoformat(str(a["end_date"] or a["date"]))
+            b_end = date_type.fromisoformat(str(b["end_date"] or b["date"]))
+        except (TypeError, ValueError):
+            return False
+        if a_end < b_start or b_end < a_start:
             return False
 
         time_a, time_b = normalize(a["time"]), normalize(b["time"])
