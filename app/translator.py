@@ -62,6 +62,22 @@ def normalize_event_title(title: str) -> str:
     value = re.sub(r"\s+[–—-]\s*$", "", value)
     value = value.strip(" -–—|•·")
     value = re.sub(r"([!?.,:;]){2,}", r"\1", value)
+
+    # Some aggregators incorrectly expose the first part of the description
+    # as the event name. Keep legitimate titles intact, but cut obvious
+    # sentence-like catalogue blobs at the first sentence boundary.
+    if len(value) > 120:
+        sentence = re.split(r"(?<=[.!?])\s+", value, maxsplit=1)[0].strip()
+        if 8 <= len(sentence) <= 120:
+            value = sentence
+
+    # Normalize separators so equivalent titles from different sources hash
+    # to the same event identity.
+    value = re.sub(r"\s*[|]\s*", " — ", value)
+    value = re.sub(r"\s*[-–—]\s*", " — ", value)
+    value = re.sub(r"\s+—\s+", " — ", value)
+    value = re.sub(r"(?:\s+—){2,}", " —", value)
+    value = re.sub(r"\s+", " ", value).strip(" -–—|•·")
     return value[:200].strip()
 
 
