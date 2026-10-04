@@ -1,13 +1,29 @@
-""""Lightweight event text translation to Russian."""
+"""Lightweight event text translation and Russian event comments."""
 
-import re
 import logging
+import re
+
 import requests
 
 logger = logging.getLogger(__name__)
 
 URL = "https://translate.googleapis.com/translate_a/single"
 HEADERS = {"User-Agent": "StayAliveCyprusBot/1.0"}
+
+_METADATA_TAIL = re.compile(
+    r"\s+(?=(?:Location|Tickets?|Register|Registration|More info|Info|Price|"
+    r"We meet|Bring|Doors?\s+open|Get your tickets?|Link in bio|"
+    r"Локация|Билеты|Регистрация|Подробнее|Цена|Встречаемся)\b)",
+    re.I,
+)
+
+_BOILERPLATE = re.compile(
+    r"(?:https?://\S+|www\.\S+|#\w+|"
+    r"tickets?\b|register\b|registration\b|link in bio\b|"
+    r"location\b|price\b|doors?\s+open\b|"
+    r"билет\w*|регистрац\w*|локаци\w*|подробност\w*)",
+    re.I,
+)
 
 
 def _has_latin(text: str) -> bool:
@@ -45,18 +61,28 @@ def translate_to_russian(text: str, max_chars: int = 5000) -> str:
 
 
 def normalize_event_title(title: str) -> str:
-    """Turn scraped titles into concise, human-readable event names."""
+    """Keep the original event language while removing obvious catalogue noise."""
     value = str(title or "").strip()
     if not value:
         return value
 
-    # Strip poster/catalogue decoration and metadata that should never become
-    # the event name.
-    value = re.sub(r"^[\\s#•·*_~🎉🎶🎵🎧🎸🥳✨🔥📅🪩🎭🎪🏃🍷🎨🛍👨‍👩‍👧]+", "", value).strip()
-    value = re.sub(r"^(?:event|events|what'?s on|upcoming events)\\s*[:|—–-]\\s*", "", value, flags=re.I)
-    value = re.sub(r"\\s+(?:at|@)\\s+[A-Z][A-Za-z0-9 .&'_-]{2,60}$", "", value, flags=re.I)
-
-    # Remove common catalogue noise while preserving the actual event name.
+    value = re.sub(
+        r"^[\s#•·*_~🎉🎶🎵🎧🎸🥳✨🔥📅🪩🎭🎪🏃🍷🎨🛍👨‍👩‍👧]+",
+        "",
+        value,
+    ).strip()
+    value = re.sub(
+        r"^(?:event|events|what'?s on|upcoming events)\s*[:|—–-]\s*",
+        "",
+        value,
+        flags=re.I,
+    )
+    value = re.sub(
+        r"\s+(?:at|@)\s+[A-Z][A-Za-z0-9 .&'_-]{2,60}$",
+        "",
+        value,
+        flags=re.I,
+    )
     value = re.sub(
         r"^(?:event|events|cyprus underground|cyprus events)\s*[:|—–-]\s*",
         "",
@@ -69,8 +95,6 @@ def normalize_event_title(title: str) -> str:
     value = value.strip(" -–—|•·")
     value = re.sub(r"([!?.,:;]){2,}", r"\1", value)
 
-    # Some aggregators append the description directly to the title without
-    # punctuation. Cut common description lead-ins before doing dedupe.
     value = re.split(
         r"\s+(?=(?:Это\s+|В\s+программе\b|Группа\s+|Португальский\s+артист\b|"
         r"Vienna\s+Schoenbrunn\s+Palace\s+Orchestra\b|"
@@ -81,24 +105,13 @@ def normalize_event_title(title: str) -> str:
         flags=re.I,
     )[0].strip()
 
-    # If a long title is actually a sentence-like description, keep its first
-    # sentence rather than polluting the event catalogue.
     if len(value) > 120:
         sentence = re.split(r"(?<=[.!?])\s+", value, maxsplit=1)[0].strip()
         if 8 <= len(sentence) <= 120:
             value = sentence
 
-    # Remove obvious description/metadata tails that have leaked into titles.
-    value = re.split(
-        r"\s+(?=(?:Location|Tickets?|Register|Registration|More info|Info|Price|"
-        r"We meet|Bring|Doors?\s+open|Это|Группа|В программе|Гостей\s+жд|"
-        r"Два\s+вечера|В\s+составе|Зарегистрироваться|Получить\s+стартовый\s+пакет)\b)",
-        value,
-        maxsplit=1,
-        flags=re.I,
-    )[0].strip()
+    value = _METADATA_TAIL.split(value, maxsplit=1)[0].strip()
 
-    # A caption that begins with instructions is not a useful event title.
     if re.match(
         r"^(?:Принесите|Зарегистрироваться|Получить\s+стартовый|"
         r"Location\s*:|Tickets?\s*:|Register\b|Registration\b|"
@@ -108,8 +121,6 @@ def normalize_event_title(title: str) -> str:
     ):
         return "Event"
 
-    # Normalize separators so equivalent titles from different sources hash
-    # to the same event identity.
     value = re.sub(r"\s*[|]\s*", " — ", value)
     value = re.sub(r"\s*[-–—]\s*", " — ", value)
     value = re.sub(r"\s+—\s+", " — ", value)
@@ -118,11 +129,67 @@ def normalize_event_title(title: str) -> str:
     return value[:200].strip()
 
 
+def _short_source_description(text: str, max_chars: int = 220) -> str:
+    """Extract useful source context without storing the original full caption."""
+    value = re.sub(r"https?://\S+|www\.\S+", "", str(text or ""), flags=re.I)
+    value = re.sub(r"\s+", " ", value).strip()
+    value = _METADATA_TAIL.split(value, maxsplit=1)[0].strip()
+    if not value or _BOILERPLATE.fullmatch(value):
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", value)
+    useful = []
+    for sentence in sentences:
+        sentence = sentence.strip(" -–—|•")
+        if not sentence:
+            continue
+        if _BOILERPLATE.search(sentence) and len(sentence) < 70:
+            continue
+        useful.append(sentence)
+        if len(" ".join(useful)) >= max_chars:
+            break
+    return " ".join(useful)[:max_chars].rstrip(" ,;:-")
+
+
+def _venue_phrase(event: dict) -> str:
+    venue = str(event.get("venue") or "").strip()
+    city = str(event.get("city") or "").strip()
+    category = str(event.get("category") or "")
+    if venue:
+        if "Nightlife" in category:
+            return f"в клубе {venue}"
+        if "Еда и вино" in category:
+            return f"в {venue}"
+        return f"в {venue}"
+    if city:
+        return f"в {city}"
+    return ""
+
+
+def build_event_comment(event: dict) -> str:
+    """Create one short Russian comment; never replace the original title."""
+    title = normalize_event_title(event.get("title", ""))
+    source_description = _short_source_description(event.get("description", ""))
+
+    # Translate only the compact summary, never the title stored in the event.
+    summary_input = title
+    if source_description:
+        summary_input = f"{title}. {source_description}"
+    translated = translate_to_russian(summary_input, max_chars=450)
+    translated = re.sub(r"\s+", " ", translated).strip()
+
+    venue = _venue_phrase(event)
+    if venue and venue.casefold() not in translated.casefold():
+        translated = f"{translated} {venue}".strip()
+
+    # Keep the comment compact enough for both list and detail views.
+    if len(translated) > 260:
+        translated = re.split(r"(?<=[.!?])\s+", translated, maxsplit=1)[0].strip()
+    return translated[:280].rstrip()
+
+
 def translate_event(event: dict) -> dict:
-    # Keep event titles, venue names, city names and brands in their original form.
+    # IMPORTANT: title remains in the source language. Only the short comment
+    # in description is Russian.
     event["title"] = normalize_event_title(event.get("title", ""))
-    if event.get("description"):
-        event["description"] = translate_to_russian(
-            event["description"], max_chars=5000
-        )
+    event["description"] = build_event_comment(event)
     return event
