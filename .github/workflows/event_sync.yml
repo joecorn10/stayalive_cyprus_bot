@@ -61,7 +61,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Persist database
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         run: |
           mkdir -p /tmp/stayalive-state
           if [ -f events.db ]; then
