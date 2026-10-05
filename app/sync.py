@@ -8,7 +8,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
+from app.database import cleanup_expired_events, deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
@@ -394,6 +394,10 @@ def sync_all() -> int:
     deduplicated = deduplicate_events()
     if deduplicated:
         logger.info("Merged %s semantic duplicate events", deduplicated)
+
+    expired = cleanup_expired_events()
+    if expired:
+        logger.info("Removed %s expired events", expired)
 
     return total
 
