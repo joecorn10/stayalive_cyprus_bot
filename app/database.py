@@ -1048,6 +1048,32 @@ def deduplicate_exact_events() -> int:
 
     return removed
 
+
+def cleanup_expired_events(as_of: str | None = None, dry_run: bool = False) -> int:
+    """Remove events whose final date is strictly before the reference date.
+
+    This is intentionally isolated from event ingestion: event_sources are
+    removed first, while source registrations and future/today events remain
+    untouched. In dry-run mode the database is never mutated.
+    """
+    from datetime import date
+
+    reference_date = date.fromisoformat(as_of) if as_of else date.today()
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT id FROM events
+               WHERE COALESCE(end_date, date) < ?""",
+            (reference_date.isoformat(),),
+        ).fetchall()
+        ids = [row["id"] for row in rows]
+        if dry_run or not ids:
+            return len(ids)
+
+        conn.executemany("DELETE FROM event_sources WHERE event_id = ?", [(event_id,) for event_id in ids])
+        conn.executemany("DELETE FROM events WHERE id = ?", [(event_id,) for event_id in ids])
+        conn.commit()
+    return len(ids)
+
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
     """Read the prepared event catalogue without mutating or fuzzy-filtering it.
 
