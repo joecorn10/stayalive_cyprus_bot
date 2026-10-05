@@ -160,20 +160,21 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         )
     except requests.RequestException as exc:
         logger.warning(
-            "Instagram profile request failed for %s; trying Apify fallback: %s",
+            "Instagram profile request failed for %s; trying free fallbacks: %s",
             profile_url,
             exc,
         )
         return (
-            _fetch_via_apify(profile_url)
-            or _fetch_via_mobile_api(profile_url)
+            _fetch_via_mobile_api(profile_url)
             or _fetch_via_reader(profile_url)
+            or _fetch_via_browser(profile_url)
+            or _fetch_via_apify(profile_url)
         )
 
     final_path = urlparse(response.url).path.lower()
     if response.status_code != 200:
         logger.warning(
-            "Instagram profile returned HTTP %s for %s; trying Apify fallback",
+            "Instagram profile returned HTTP %s for %s; trying free fallbacks",
             response.status_code,
             profile_url,
         )
@@ -181,7 +182,7 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
     if "/accounts/login" in final_path:
         logger.warning(
-            "Instagram profile is behind a login wall for %s; trying Apify fallback",
+            "Instagram profile is behind a login wall for %s; trying free fallbacks",
             profile_url,
         )
         return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url) or _fetch_via_browser(profile_url) or _fetch_via_apify(profile_url)
@@ -192,7 +193,7 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
     logger.warning(
         "Instagram returned HTTP 200 but no posts were extracted for %s; "
-        "trying Apify fallback",
+        "trying free fallbacks",
         profile_url,
     )
     return (
