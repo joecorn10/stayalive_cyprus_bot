@@ -187,6 +187,7 @@ def test_cleanup_expired_events_removes_event_source_links():
         database.init_db()
         event = _event("Finished", date="2026-10-04")
         database.upsert_events([event])
+        database.add_source("Test source", "https://example.com/source/", "Website")
         source = database.get_source_by_url("https://example.com/source/")
         assert source is not None
         with database.get_connection() as conn:
