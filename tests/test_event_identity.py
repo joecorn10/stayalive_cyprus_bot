@@ -159,3 +159,43 @@ def test_semantic_dedupe_ignores_venue_formatting_when_title_is_exact():
             conn.commit()
 
         assert database.deduplicate_events() == 1
+
+
+
+def test_cleanup_expired_events_removes_only_finished_events():
+    with tempfile.TemporaryDirectory() as tmp:
+        database.DATABASE_PATH = Path(tmp) / "events.db"
+        database.init_db()
+        database.upsert_events([
+            _event("Finished", date="2026-10-04"),
+            _event("Today", date="2026-10-05"),
+            _event("Future", date="2026-10-06"),
+            _event("Multiday", date="2026-10-01", end_date="2026-10-05"),
+        ])
+        assert database.cleanup_expired_events("2026-10-05", dry_run=True) == 1
+        with database.get_connection() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 4
+        assert database.cleanup_expired_events("2026-10-05") == 1
+        with database.get_connection() as conn:
+            titles = {row[0] for row in conn.execute("SELECT title FROM events")}
+            assert titles == {"Today", "Future", "Multiday"}
+
+
+def test_cleanup_expired_events_removes_event_source_links():
+    with tempfile.TemporaryDirectory() as tmp:
+        database.DATABASE_PATH = Path(tmp) / "events.db"
+        database.init_db()
+        event = _event("Finished", date="2026-10-04")
+        database.upsert_events([event])
+        source = database.get_source_by_url("https://example.com/source/")
+        assert source is not None
+        with database.get_connection() as conn:
+            event_id = conn.execute("SELECT id FROM events").fetchone()[0]
+            conn.execute(
+                "INSERT OR IGNORE INTO event_sources (event_id, source_id, source_url) VALUES (?, ?, ?)",
+                (event_id, source["id"], source["url"]),
+            )
+            conn.commit()
+        assert database.cleanup_expired_events("2026-10-05") == 1
+        with database.get_connection() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM event_sources").fetchone()[0] == 0
