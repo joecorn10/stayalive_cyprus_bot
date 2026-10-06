@@ -8,7 +8,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import cleanup_invalid_events, cleanup_mojibake_events, deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
+from app.database import cleanup_invalid_events, cleanup_mojibake_events, deduplicate_events, get_source_by_url, init_db, list_sources, sanitize_event_text, upsert_events
 from app.date_utils import is_valid_event_date, normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
@@ -248,6 +248,22 @@ def _normalize(events: list[dict]) -> list[dict]:
             print(
                 f"INVALID_EVENT_DATE | {event.get('source_url', '')} | "
                 f"{invalid_date or event.get('date', '')} | {event.get('title', '')}",
+                flush=True,
+            )
+            continue
+
+        # Normalize encoding before classification. Never allow mojibake
+        # into the catalogue: repair it when possible, otherwise reject the
+        # event instead of showing corrupted text to users.
+        if not sanitize_event_text(event):
+            logger.warning(
+                "Skipping event with unrecoverable mojibake | source=%s | title=%s",
+                event.get("source_url", ""),
+                event.get("title", ""),
+            )
+            print(
+                f"INVALID_ENCODING | {event.get('source_url', '')} | "
+                f"{event.get('title', '')}",
                 flush=True,
             )
             continue
