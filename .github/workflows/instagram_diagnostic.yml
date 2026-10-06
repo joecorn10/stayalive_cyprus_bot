@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
       - name: Run Instagram diagnostic
         env:
           INSTAGRAM_DIAGNOSTIC_URL: ${{ inputs.url || 'https://www.instagram.com/zebra_limassol/' }}
