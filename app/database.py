@@ -1087,46 +1087,80 @@ def deduplicate_exact_events() -> int:
     return removed
 
 def _repair_mojibake_text(value: str) -> str:
-    """Repair common UTF-8-as-Latin-1/CP1252 corruption in stored event text."""
-    import re
-
+    """Repair UTF-8 text that was decoded once too many times."""
     value = str(value or "")
     if not value:
         return value
 
-    marker_re = re.compile(r"(?:[ÃÂÐÑÎÏ][\x80-\xff]|â[\x80-\xff]{1,2}|�)")
-    control_re = re.compile(r"[\x80-\x9f]")
+    import re
+
+    marker_re = re.compile(
+        r"(?:[ÃÂÐÑÎÏ][\\x80-\\xff]|â[\\x80-\\xff]{1,2}|�)"
+    )
+    control_re = re.compile(r"[\\x80-\\x9f]")
 
     def score(text: str) -> int:
         return len(marker_re.findall(text)) + len(control_re.findall(text))
 
     best = value
     best_score = score(value)
-    for encoding in ("latin1", "cp1252"):
-        try:
-            candidate = value.encode(encoding).decode("utf-8")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            continue
-        candidate_score = score(candidate)
-        if candidate_score < best_score:
-            best = candidate
-            best_score = candidate_score
+
+    # Some rows were corrupted more than once, so allow several repair passes.
+    for _ in range(3):
+        improved = False
+        for encoding in ("latin1", "cp1252"):
+            try:
+                candidate = best.encode(encoding).decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                continue
+            candidate_score = score(candidate)
+            if candidate_score < best_score:
+                best = candidate
+                best_score = candidate_score
+                improved = True
+        if not improved:
+            break
+
     return best
 
 
+def _has_mojibake_text(value: str) -> bool:
+    """Return True when text still contains obvious encoding corruption."""
+    import re
+
+    value = str(value or "")
+    if not value:
+        return False
+
+    return bool(
+        re.search(r"(?:[ÃÂÐÑÎÏ][\\x80-\\xff]|â[\\x80-\\xff]{1,2}|�)", value)
+        or re.search(r"[\\x80-\\x9f]", value)
+    )
+
+
 def cleanup_mojibake_events() -> int:
-    """Repair legacy event text that was stored with broken UTF-8 decoding."""
+    """Repair legacy mojibake; delete rows that cannot be repaired safely."""
     fields = ("title", "description", "venue", "city")
     changed = 0
+    removed = 0
+
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT id, title, description, venue, city FROM events"
         ).fetchall()
+
         for row in rows:
             repaired = {
                 field: _repair_mojibake_text(row[field])
                 for field in fields
             }
+
+            if any(_has_mojibake_text(repaired[field]) for field in fields):
+                conn.execute("DELETE FROM event_sources WHERE event_id = ?", (row["id"],))
+                conn.execute("DELETE FROM events WHERE id = ?", (row["id"],))
+                removed += 1
+                continue
+
             if any(repaired[field] != (row[field] or "") for field in fields):
                 conn.execute(
                     """UPDATE events
@@ -1142,8 +1176,20 @@ def cleanup_mojibake_events() -> int:
                     ),
                 )
                 changed += 1
+
         conn.commit()
-    return changed
+
+    return changed + removed
+
+
+def sanitize_event_text(event: dict) -> bool:
+    """Repair event text in memory and reject it if corruption remains."""
+    fields = ("title", "description", "venue", "city")
+    for field in fields:
+        event[field] = _repair_mojibake_text(event.get(field, ""))
+        if _has_mojibake_text(event[field]):
+            return False
+    return True
 
 
 def cleanup_invalid_events() -> int:
