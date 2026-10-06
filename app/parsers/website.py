@@ -30,6 +30,9 @@ class WebsiteParser(EventParser):
         else:
             html = response.text
         soup = BeautifulSoup(html, "html.parser")
+        semantic_events = self._semantic_event_cards(soup)
+        if semantic_events:
+            return semantic_events
         if "stantarkkomety.com" in self.url:
             stantar_events = self._stantar_cards(soup)
             if stantar_events:
@@ -73,6 +76,44 @@ class WebsiteParser(EventParser):
         # generic date/time/venue line parser.
         if not events:
             events = self._html_schedule_events(soup)
+        return events
+
+    def _semantic_event_cards(self, soup: BeautifulSoup) -> list[dict]:
+        """Parse semantic event cards used by several Cyprus event sites."""
+        if not any(host in self.url.casefold() for host in ("cyproplan.com", "etkocyprus.com", "eventor.com.cy", "soldoutticketbox.com")):
+            return []
+        date_re = re.compile(r"\\b(\\d{1,2})/(\\d{1,2})/(20\\d{2})\\b|\\b(\\d{1,2})\\s+(January|February|March|April|May|June|July|August|September|October|November|December)\\b", re.I)
+        month_map = {m.lower(): n for n, m in enumerate(("January","February","March","April","May","June","July","August","September","October","November","December"), 1)}
+        events, seen = [], set()
+        for link in soup.find_all("a", href=True):
+            if not re.search(r"read\\s+more|buy|tickets|αγορα|купить", link.get_text(" ", strip=True), re.I):
+                continue
+            card = link
+            for _ in range(6):
+                if card.parent is None: break
+                card = card.parent
+                text = re.sub(r"\\s+", " ", card.get_text(" ", strip=True))
+                if date_re.search(text): break
+            text = re.sub(r"\\s+", " ", card.get_text(" ", strip=True))
+            dm = date_re.search(text)
+            if not dm: continue
+            if dm.group(1):
+                date = f"{dm.group(3)}-{int(dm.group(2)):02d}-{int(dm.group(1)):02d}"
+            else:
+                date = f"{datetime.now().year}-{month_map[dm.group(5).lower()]:02d}-{int(dm.group(4)):02d}"
+            heading = card.find(["h1","h2","h3","h4","h5"])
+            if not heading: continue
+            title = re.sub(r"\\s+", " ", heading.get_text(" ", strip=True)).strip()
+            if not title or title.lower() in {"read more", "buy"}: continue
+            venue = ""
+            m = re.search(r"(?:Where|Location|Venue)\\s*:?\\s*(.+?)(?=\\s+(?:When|Date|Tickets|From)\\b|$)", text, re.I)
+            if m: venue = m.group(1).strip(" |·")
+            tm = re.search(r"\\b(\\d{1,2}:\\d{2})\\b", text)
+            time = tm.group(1) if tm else ""
+            key = (title.casefold(), date, venue.casefold())
+            if key in seen: continue
+            seen.add(key)
+            events.append({"title": title[:200], "description": "", "date": date, "end_date": date, "time": time, "venue": venue[:200], "city": next((x for x in ("Limassol","Nicosia","Larnaca","Paphos","Ayia Napa","Protaras","Famagusta") if re.search(rf"\\b{re.escape(x)}\\b", text, re.I)), ""), "price": "", "ticket_url": urljoin(self.url, link["href"]), "source_url": self.url, "image_url": "", "category": _website_category(title)})
         return events
 
     def _cyprus_bz_event_page(self, soup: BeautifulSoup) -> dict | None:
