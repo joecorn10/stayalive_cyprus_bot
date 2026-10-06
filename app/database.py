@@ -1086,6 +1086,66 @@ def deduplicate_exact_events() -> int:
 
     return removed
 
+def _repair_mojibake_text(value: str) -> str:
+    """Repair common UTF-8-as-Latin-1/CP1252 corruption in stored event text."""
+    import re
+
+    value = str(value or "")
+    if not value:
+        return value
+
+    marker_re = re.compile(r"(?:[ÃÂÐÑÎÏ][\x80-\xff]|â[\x80-\xff]{1,2}|�)")
+    control_re = re.compile(r"[\x80-\x9f]")
+
+    def score(text: str) -> int:
+        return len(marker_re.findall(text)) + len(control_re.findall(text))
+
+    best = value
+    best_score = score(value)
+    for encoding in ("latin1", "cp1252"):
+        try:
+            candidate = value.encode(encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        candidate_score = score(candidate)
+        if candidate_score < best_score:
+            best = candidate
+            best_score = candidate_score
+    return best
+
+
+def cleanup_mojibake_events() -> int:
+    """Repair legacy event text that was stored with broken UTF-8 decoding."""
+    fields = ("title", "description", "venue", "city")
+    changed = 0
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, title, description, venue, city FROM events"
+        ).fetchall()
+        for row in rows:
+            repaired = {
+                field: _repair_mojibake_text(row[field])
+                for field in fields
+            }
+            if any(repaired[field] != (row[field] or "") for field in fields):
+                conn.execute(
+                    """UPDATE events
+                       SET title=?, description=?, venue=?, city=?,
+                           last_seen_at=CURRENT_TIMESTAMP
+                       WHERE id=?""",
+                    (
+                        repaired["title"],
+                        repaired["description"],
+                        repaired["venue"],
+                        repaired["city"],
+                        row["id"],
+                    ),
+                )
+                changed += 1
+        conn.commit()
+    return changed
+
+
 def cleanup_invalid_events() -> int:
     """Remove legacy rows whose stored dates are not real calendar dates."""
     from datetime import date as date_type
