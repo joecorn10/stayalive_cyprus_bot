@@ -9,7 +9,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.database import deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
-from app.date_utils import normalize_event_dates
+from app.date_utils import is_valid_event_date, normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
 from app.parsers.etko import EtkoParser
@@ -237,6 +237,20 @@ def _normalize(events: list[dict]) -> list[dict]:
     normalized = []
     for event in events:
         normalize_event_dates(event)
+        invalid_date = event.pop("_invalid_date", "")
+        if invalid_date or not is_valid_event_date(event.get("date", "")):
+            logger.warning(
+                "Skipping event with invalid date | source=%s | raw=%s | title=%s",
+                event.get("source_url", ""),
+                invalid_date or event.get("date", ""),
+                event.get("title", ""),
+            )
+            print(
+                f"INVALID_EVENT_DATE | {event.get('source_url', '')} | "
+                f"{invalid_date or event.get('date', '')} | {event.get('title', '')}",
+                flush=True,
+            )
+            continue
 
         # Classify from the original source fields before translation.
         # Translation is presentation-only; it must never remove semantic
