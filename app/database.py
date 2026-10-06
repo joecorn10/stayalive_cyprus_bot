@@ -1095,9 +1095,9 @@ def _repair_mojibake_text(value: str) -> str:
     import re
 
     marker_re = re.compile(
-        r"(?:[ÃÂÐÑÎÏ][\\x80-\\xff]|â[\\x80-\\xff]{1,2}|�)"
+        r"(?:[ÃÂÐÑÎÏ][\x80-\xff]|â[\x80-\xff]{1,2}|�)"
     )
-    control_re = re.compile(r"[\\x80-\\x9f]")
+    control_re = re.compile(r"[\x80-\x9f]")
 
     def score(text: str) -> int:
         return len(marker_re.findall(text)) + len(control_re.findall(text))
@@ -1133,8 +1133,8 @@ def _has_mojibake_text(value: str) -> bool:
         return False
 
     return bool(
-        re.search(r"(?:[ÃÂÐÑÎÏ][\\x80-\\xff]|â[\\x80-\\xff]{1,2}|�)", value)
-        or re.search(r"[\\x80-\\x9f]", value)
+        re.search(r"(?:[ÃÂÐÑÎÏ][\x80-\xff]|â[\x80-\xff]{1,2}|�)", value)
+        or re.search(r"[\x80-\x9f]", value)
     )
 
 
