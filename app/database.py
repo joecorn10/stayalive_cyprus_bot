@@ -1192,6 +1192,29 @@ def sanitize_event_text(event: dict) -> bool:
     return True
 
 
+
+def cleanup_expired_events() -> int:
+    """Remove events that have completely ended before today."""
+    removed = 0
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT id FROM events
+               WHERE COALESCE(NULLIF(end_date, ''), date) < date('now')"""
+        ).fetchall()
+
+        for row in rows:
+            conn.execute(
+                "DELETE FROM event_sources WHERE event_id = ?",
+                (row["id"],),
+            )
+            conn.execute("DELETE FROM events WHERE id = ?", (row["id"],))
+            removed += 1
+
+        conn.commit()
+
+    return removed
+
+
 def cleanup_invalid_events() -> int:
     """Remove legacy rows whose stored dates are not real calendar dates."""
     from datetime import date as date_type
