@@ -8,7 +8,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import cleanup_invalid_events, deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
+from app.database import cleanup_invalid_events, cleanup_mojibake_events, deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import is_valid_event_date, normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
@@ -375,6 +375,14 @@ def sync_source_by_url(url: str) -> int:
 def sync_all() -> int:
     """Fetch sources concurrently, then write results to SQLite sequentially."""
     init_db()
+
+    # Repair legacy mojibake before matching fresh events. This lets the
+    # corrected parser data update the existing row instead of creating a
+    # second event with a different corrupted title/venue.
+    cleaned_mojibake = cleanup_mojibake_events()
+    if cleaned_mojibake:
+        logger.info("Repaired %s legacy events with mojibake text", cleaned_mojibake)
+
     sources = [source for source in list_sources() if source["enabled"]]
     parsed: list[tuple[str, list[dict]]] = []
 
