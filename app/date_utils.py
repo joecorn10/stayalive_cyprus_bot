@@ -23,7 +23,20 @@ WEEKDAYS = {
 }
 
 def _date(year: int, month: int, day: int) -> str:
-    return f"{year:04d}-{month:02d}-{day:02d}"
+    """Return an ISO date only when the calendar date is actually valid."""
+    try:
+        return datetime(year, month, day).date().isoformat()
+    except ValueError:
+        return ""
+
+
+def is_valid_event_date(value: str) -> bool:
+    """Return True only for a real YYYY-MM-DD calendar date."""
+    try:
+        datetime.strptime(str(value or "").strip(), "%Y-%m-%d")
+        return True
+    except (TypeError, ValueError):
+        return False
 
 def _next_weekday(value: datetime, weekday: int) -> str:
     delta = (weekday - value.weekday()) % 7
@@ -128,6 +141,19 @@ def normalize_event_dates(event: dict) -> dict:
         if parsed:
             start = start or parsed[0]
             end = parsed[1]
+    # Invalid parser output must never be persisted into the catalogue.
+    # Keep the marker so the sync layer can report and skip the bad event
+    # without aborting the entire source.
+    if start and not is_valid_event_date(start):
+        event["_invalid_date"] = start
+        start = ""
+    if end and not is_valid_event_date(end):
+        event["_invalid_date"] = event.get("_invalid_date") or end
+        end = ""
+    if start and end and end < start:
+        event["_invalid_date"] = f"{start}..{end}"
+        start = ""
+        end = ""
     event["date"] = start
     event["end_date"] = end or start
     return event
