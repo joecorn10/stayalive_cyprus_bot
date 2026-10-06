@@ -348,6 +348,9 @@ def sync_telegram_source(url: str) -> int:
 def sync_source(source) -> int:
     """Sync one registered source without touching the rest of the catalogue."""
     init_db()
+    cleaned_mojibake = cleanup_mojibake_events()
+    if cleaned_mojibake:
+        logger.info("Repaired %s legacy events with mojibake text", cleaned_mojibake)
     events = _normalize(_parse_source(source))
     added = upsert_events(events)
 
