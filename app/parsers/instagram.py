@@ -1,8 +1,8 @@
 """Instagram public-profile event parser.
 
-Use the public profile HTML when available, with Apify as the primary fallback
-when GitHub Actions hits Instagram's login wall or rate limit. Internal API
-and Jina Reader remain secondary fallbacks.
+Prefer free fallbacks first: public HTML → Instagram internal API → Jina
+Reader → Playwright browser. Use Apify only as the final fallback when the
+free methods cannot recover posts.
 """
 
 import html
@@ -197,9 +197,10 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         profile_url,
     )
     return (
-        _fetch_via_apify(profile_url)
-        or _fetch_via_mobile_api(profile_url)
+        _fetch_via_mobile_api(profile_url)
         or _fetch_via_reader(profile_url)
+        or _fetch_via_browser(profile_url)
+        or _fetch_via_apify(profile_url)
     )
 
 
