@@ -1,5 +1,7 @@
 name: Event sync
 
+# Sync includes encoding safety and rejects unrecoverable mojibake.
+
 on:
   schedule:
     - cron: "0 2 * * *"
