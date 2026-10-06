@@ -328,6 +328,47 @@ _IDENTITY_GENERIC = {
 }
 
 
+def _identity_venue(value: str) -> str:
+    """Normalize venue names across languages and transliterations."""
+    import re
+    import unicodedata
+
+    value = str(value or "").casefold().strip()
+    if not value:
+        return ""
+
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+
+    # Common Greek venue transliterations / spellings found across sources.
+    greek = str.maketrans({
+        "α":"a","β":"v","γ":"g","δ":"d","ε":"e","ζ":"z","η":"i","θ":"th",
+        "ι":"i","κ":"k","λ":"l","μ":"m","ν":"n","ξ":"x","ο":"o","π":"p",
+        "ρ":"r","σ":"s","ς":"s","τ":"t","υ":"y","φ":"f","χ":"kh","ψ":"ps",
+        "ω":"o",
+    })
+    value = value.translate(greek)
+
+    aliases = (
+        (r"\\bamfitheatro\\b", "amphitheatre"),
+        (r"\\bamfitheatro\\b", "amphitheater"),
+        (r"\\bamfitheatre\\b", "amphitheater"),
+        (r"\\bmakarioy\\b", "makarios"),
+        (r"\\bmakariou\\b", "makarios"),
+        (r"\\bscholis\\b", "school"),
+        (r"\\bscholi(?:s|a)\\b", "school"),
+        (r"\\btyflon\\b", "blind"),
+        (r"\\btyflwn\\b", "blind"),
+        (r"\\bgymnasio\\b", "gymnasium"),
+        (r"\\bgymnasiou\\b", "gymnasium"),
+        (r"\\bgymnasioy\\b", "gymnasium"),
+    )
+    for pattern, replacement in aliases:
+        value = re.sub(pattern, replacement, value, flags=re.I)
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return " ".join(value.split())
+
+
 def _identity_tokens(value: str) -> set[str]:
     import re
     return {
@@ -349,7 +390,7 @@ def _identity_title_tokens(event: dict) -> set[str]:
 def _identity_key(event: dict) -> str:
     import hashlib
     city = _identity_text(event.get("city", ""))
-    venue = _identity_text(event.get("venue", ""))
+    venue = _identity_venue(event.get("venue", ""))
     time = _identity_text(event.get("time", ""))
     title_tokens = _identity_title_tokens(event)
     title_tokens -= _identity_tokens(city)
@@ -371,7 +412,7 @@ def _event_key(event: dict) -> tuple:
         _identity_text(event.get("title", "")),
         event.get("date", ""),
         _identity_text(event.get("time", "")),
-        _identity_text(event.get("venue", "")),
+        _identity_venue(event.get("venue", "")),
         _identity_text(event.get("city", "")),
     )
 
@@ -418,7 +459,7 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
     import re
 
     city = _identity_text(event.get("city", ""))
-    venue = _identity_text(event.get("venue", ""))
+    venue = _identity_venue(event.get("venue", ""))
     time = _identity_text(event.get("time", ""))
     title_tokens = _identity_title_tokens(event)
     title_tokens -= _identity_tokens(city)
@@ -444,7 +485,7 @@ def _find_fuzzy_event(conn: sqlite3.Connection, event: dict, exclude_id: int | N
             continue
         other_tokens = _identity_title_tokens(dict(row))
         row_city = _identity_text(row["city"])
-        row_venue = _identity_text(row["venue"])
+        row_venue = _identity_venue(row["venue"])
         row_time = _identity_text(row["time"])
         row_ticket = _identity_text(row["ticket_url"])
         row_source = _identity_text(row["source_url"])
