@@ -33,6 +33,54 @@ def main() -> None:
     print(f"Instagram diagnostic: @{handle}")
     print(f"URL: {url}")
 
+    print("\n=== Instaloader test ===")
+    try:
+        import instaloader
+        loader = instaloader.Instaloader(
+            download_pictures=False,
+            download_videos=False,
+            download_comments=False,
+            download_geotags=False,
+            save_metadata=False,
+            compress_json=False,
+            max_connection_attempts=1,
+            request_timeout=30,
+        )
+        profile = instaloader.Profile.from_username(loader.context, handle)
+        count = 0
+        for post in profile.get_posts():
+            count += 1
+            print(f"INSTALOADER POST {count}: {post.shortcode}")
+            print(f"  date: {post.date_utc.isoformat()}")
+            print(f"  url: https://www.instagram.com/p/{post.shortcode}/")
+            print(f"  caption: {(post.caption or '')[:180].replace(chr(10), ' ')}")
+            if count >= 10:
+                break
+        print(f"Instaloader posts fetched: {count}")
+    except Exception as exc:
+        print(f"Instaloader ERROR: {type(exc).__name__}: {exc}")
+
+    print("\n=== RSSHub test ===")
+    import requests as std_requests
+    for feed_url in (
+        f"https://rsshub.app/instagram/2/user/{handle}",
+        f"https://rsshub.app/instagram/user/{handle}",
+    ):
+        try:
+            response = std_requests.get(feed_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
+            print(f"RSSHub {feed_url}: HTTP {response.status_code}, bytes={len(response.content)}")
+            print(f"  content-type: {response.headers.get('content-type', '-')}")
+            print(f"  items: {response.text.count('<item>')}")
+            print(f"  contains_handle: {handle.lower() in response.text.lower()}")
+            print(f"  preview: {response.text[:300].replace(chr(10), ' ')}")
+        except Exception as exc:
+            print(f"RSSHub {feed_url}: ERROR {type(exc).__name__}: {exc}")
+
+    print("\n=== UnSocial availability test ===")
+    print("UnSocial is a desktop/local RSS server and requires an authenticated browser session to fetch Instagram posts.")
+    print("Automated GitHub runner cannot perform a meaningful UnSocial Instagram scrape without a supplied Instagram browser session.")
+    print("UnSocial status: requires local session test")
+    
     print("\n=== curl_cffi fingerprint test ===")
     for impersonate in ("chrome", "safari", "safari_ios"):
         try:
