@@ -64,9 +64,16 @@ class AggregatorParser(EventParser):
                     logger.warning("%s fetch failed: %s", self.source_name, exc)
                     continue
 
-                pages.append((page_url, response.text))
+                # Cyprus.BZ sometimes declares a charset that does not match
+                # the UTF-8 payload. Decode the raw bytes explicitly so Greek/
+                # Cyrillic text never becomes mojibake before parsing.
+                if self.source_name == "Cyprus.BZ":
+                    html = response.content.decode("utf-8", errors="replace")
+                else:
+                    html = response.text
+                pages.append((page_url, html))
                 local_pages += 1
-                soup = BeautifulSoup(response.text, "html.parser")
+                soup = BeautifulSoup(html, "html.parser")
 
                 # Prefer real pagination links when the site exposes them.
                 for link in soup.find_all("a", href=True):
