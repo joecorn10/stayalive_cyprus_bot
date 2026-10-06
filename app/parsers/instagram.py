@@ -17,6 +17,13 @@ import requests
 import threading
 from bs4 import BeautifulSoup
 
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright
+except ImportError:  # pragma: no cover - Playwright is installed in production
+    PlaywrightTimeoutError = Exception
+    sync_playwright = None
+
 from app.date_utils import parse_event_dates
 from app.parsers.base import EventParser
 
@@ -25,6 +32,7 @@ logger = logging.getLogger(__name__)
 PROFILE_TIMEOUT = 15
 MAX_POSTS = 30
 APIFY_CONCURRENCY = threading.Semaphore(3)
+BROWSER_CONCURRENCY = threading.Semaphore(2)
 
 EVENT_WORDS = re.compile(
     r"\b(event|events|party|parties|club|rave|disco|concert|live|dj|djs|"
@@ -152,31 +160,32 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
         )
     except requests.RequestException as exc:
         logger.warning(
-            "Instagram profile request failed for %s; trying Apify fallback: %s",
+            "Instagram profile request failed for %s; trying free fallbacks: %s",
             profile_url,
             exc,
         )
         return (
-            _fetch_via_apify(profile_url)
-            or _fetch_via_mobile_api(profile_url)
+            _fetch_via_mobile_api(profile_url)
             or _fetch_via_reader(profile_url)
+            or _fetch_via_browser(profile_url)
+            or _fetch_via_apify(profile_url)
         )
 
     final_path = urlparse(response.url).path.lower()
     if response.status_code != 200:
         logger.warning(
-            "Instagram profile returned HTTP %s for %s; trying Apify fallback",
+            "Instagram profile returned HTTP %s for %s; trying free fallbacks",
             response.status_code,
             profile_url,
         )
-        return _fetch_via_apify(profile_url) or _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
+        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url) or _fetch_via_browser(profile_url) or _fetch_via_apify(profile_url)
 
     if "/accounts/login" in final_path:
         logger.warning(
-            "Instagram profile is behind a login wall for %s; trying Apify fallback",
+            "Instagram profile is behind a login wall for %s; trying free fallbacks",
             profile_url,
         )
-        return _fetch_via_apify(profile_url) or _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url)
+        return _fetch_via_mobile_api(profile_url) or _fetch_via_reader(profile_url) or _fetch_via_browser(profile_url) or _fetch_via_apify(profile_url)
 
     posts = _extract_posts(response.text, profile_url)
     if posts:
@@ -184,7 +193,7 @@ def _fetch_posts(profile_url: str) -> list[dict] | None:
 
     logger.warning(
         "Instagram returned HTTP 200 but no posts were extracted for %s; "
-        "trying Apify fallback",
+        "trying free fallbacks",
         profile_url,
     )
     return (
@@ -304,6 +313,41 @@ def _fetch_via_apify(profile_url: str) -> list[dict] | None:
     )
     return posts or None
 
+
+
+def _fetch_via_browser(profile_url: str) -> list[dict] | None:
+    """Render the public profile with Chromium before spending an Apify run."""
+    if sync_playwright is None:
+        return None
+    try:
+        with BROWSER_CONCURRENCY:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page(
+                        viewport={"width": 390, "height": 844},
+                        user_agent=(
+                            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                            "Version/17.5 Mobile/15E148 Safari/604.1"
+                        ),
+                        locale="en-US",
+                    )
+                    page.goto(profile_url, wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(1500)
+                    html_text = page.content()
+                finally:
+                    browser.close()
+    except Exception as exc:
+        logger.warning("Instagram browser fallback failed for %s: %s", profile_url, exc)
+        return None
+
+    posts = _extract_posts(html_text, profile_url)
+    if posts:
+        logger.info("Instagram browser fallback extracted %s posts from %s", len(posts), profile_url)
+        return posts
+    logger.warning("Instagram browser fallback returned content but no posts for %s", profile_url)
+    return None
 
 def _fetch_via_mobile_api(profile_url: str) -> list[dict] | None:
     """Try Instagram's internal public profile endpoint before external fallbacks."""
