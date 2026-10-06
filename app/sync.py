@@ -8,7 +8,7 @@ import re
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from app.database import deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
+from app.database import cleanup_invalid_events, deduplicate_events, get_source_by_url, init_db, list_sources, upsert_events
 from app.date_utils import is_valid_event_date, normalize_event_dates
 from app.parsers.cyproplan import CyproplanParser
 from app.parsers.cyprus_underground import CyprusUndergroundParser
@@ -404,6 +404,10 @@ def sync_all() -> int:
     recategorized = recategorize_existing_events()
     if recategorized:
         logger.info("Reclassified %s existing events", recategorized)
+
+    cleaned_invalid = cleanup_invalid_events()
+    if cleaned_invalid:
+        logger.info("Removed %s legacy events with invalid dates", cleaned_invalid)
 
     deduplicated = deduplicate_events()
     if deduplicated:
