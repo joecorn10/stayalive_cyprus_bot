@@ -94,6 +94,11 @@ class AggregatorParser(EventParser):
         seen_links = set()
         events = []
 
+        # EventOr listing pages already contain event cards in server HTML.
+        if self.source_name == "EventOr":
+            for page_url, html in pages:
+                events.extend(_parse_eventor_listing(html, page_url))
+
         for page_url, html in pages:
             soup = BeautifulSoup(html, "html.parser")
 
@@ -225,4 +230,68 @@ def _parse_jsonld_events(html: str, page_url: str) -> list[dict]:
             event = parser._event(item)
             if event:
                 events.append(event)
+    return events
+
+
+def _parse_eventor_listing(html: str, page_url: str) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    events = []
+    seen = set()
+    city_re = re.compile(r"\b(Limassol|Lemesos|Nicosia|Larnaca|Paphos|Ayia Napa|Paralimni|Protaras|Polis|Troodos)\b", re.I)
+    date_re = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})(?:\s*[-–]\s*(\d{1,2})/(\d{1,2})/(\d{4}))?\b")
+    time_re = re.compile(r"\b([01]\d|2[0-3]):[0-5]\d\b")
+
+    for link in soup.find_all("a", href=True):
+        href = urljoin(page_url, link["href"]).split("#", 1)[0]
+        if not LINK_PATTERNS["EventOr"].match(href):
+            continue
+        title = " ".join(link.stripped_strings).strip()
+        if not title or len(title) > 220:
+            continue
+
+        card = link
+        block_text = ""
+        for _ in range(6):
+            card = card.parent
+            if not card:
+                break
+            block_text = " ".join(card.stripped_strings)
+            if date_re.search(block_text):
+                break
+        dm = date_re.search(block_text)
+        if not dm:
+            continue
+
+        start = f"{dm.group(3)}-{int(dm.group(2)):02d}-{int(dm.group(1)):02d}"
+        end = f"{dm.group(6)}-{int(dm.group(5)):02d}-{int(dm.group(4)):02d}" if dm.group(4) else start
+        tm = time_re.search(block_text)
+        time_value = tm.group(0) if tm else ""
+        cm = city_re.search(block_text)
+        city = cm.group(1) if cm else ""
+
+        venue = ""
+        if city:
+            before_city = block_text[:cm.start()].strip(" |,–-")
+            parts = [p.strip() for p in re.split(r"\s*[|•]\s*", before_city) if p.strip()]
+            if parts:
+                venue = parts[-1][:160]
+
+        key = (title.casefold(), start, end, href)
+        if key in seen:
+            continue
+        seen.add(key)
+        events.append({
+            "title": title[:200],
+            "description": "",
+            "date": start,
+            "end_date": end,
+            "time": time_value,
+            "venue": venue,
+            "city": city,
+            "price": "",
+            "ticket_url": href,
+            "source_url": href,
+            "image_url": "",
+            "category": "События",
+        })
     return events
