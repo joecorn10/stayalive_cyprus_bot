@@ -340,34 +340,31 @@ def _identity_venue(value: str) -> str:
     value = unicodedata.normalize("NFKD", value)
     value = "".join(ch for ch in value if not unicodedata.combining(ch))
 
-    # Common Greek venue transliterations / spellings found across sources.
     greek = str.maketrans({
         "α":"a","β":"v","γ":"g","δ":"d","ε":"e","ζ":"z","η":"i","θ":"th",
         "ι":"i","κ":"k","λ":"l","μ":"m","ν":"n","ξ":"x","ο":"o","π":"p",
-        "ρ":"r","σ":"s","ς":"s","τ":"t","υ":"y","φ":"f","χ":"kh","ψ":"ps",
-        "ω":"o",
+        "ρ":"r","σ":"s","ς":"s","τ":"t","υ":"y","φ":"f","χ":"kh","ψ":"ps","ω":"o",
     })
     value = value.translate(greek)
 
     aliases = (
-        (r"\bamfitheatro\\b", "amphitheatre"),
-        (r"\bamfitheatro\\b", "amphitheater"),
-        (r"\bamfitheatre\\b", "amphitheater"),
-        (r"\bmakarioy\\b", "makarios"),
-        (r"\bmakariou\\b", "makarios"),
-        (r"\bscholis\\b", "school"),
-        (r"\bscholi(?:s|a)\\b", "school"),
-        (r"\btyflon\\b", "blind"),
-        (r"\btyflwn\\b", "blind"),
-        (r"\bgymnasio\\b", "gymnasium"),
-        (r"\bgymnasiou\\b", "gymnasium"),
-        (r"\bgymnasioy\\b", "gymnasium"),
+        (r"\bamfitheatro\b", "amphitheater"),
+        (r"\bamfitheatre\b", "amphitheater"),
+        (r"\bmakarioy\b", "makarios"),
+        (r"\bmakariou\b", "makarios"),
+        (r"\bscholis\b", "school"),
+        (r"\bscholia\b", "school"),
+        (r"\btyflon\b", "blind"),
+        (r"\btyflwn\b", "blind"),
+        (r"\bgymnasio\b", "gymnasium"),
+        (r"\bgymnasiou\b", "gymnasium"),
+        (r"\bgymnasioy\b", "gymnasium"),
     )
     for pattern, replacement in aliases:
         value = re.sub(pattern, replacement, value, flags=re.I)
+
     value = re.sub(r"[^a-z0-9]+", " ", value)
     return " ".join(value.split())
-
 
 def _identity_tokens(value: str) -> set[str]:
     import re
@@ -1087,6 +1084,25 @@ def deduplicate_exact_events() -> int:
 
         conn.commit()
 
+    return removed
+
+def cleanup_invalid_events() -> int:
+    """Remove legacy rows whose stored dates are not real calendar dates."""
+    from datetime import date as date_type
+
+    removed = 0
+    with get_connection() as conn:
+        rows = conn.execute("SELECT id, date, end_date FROM events").fetchall()
+        for row in rows:
+            try:
+                date_type.fromisoformat(str(row["date"] or ""))
+                if row["end_date"]:
+                    date_type.fromisoformat(str(row["end_date"]))
+            except (TypeError, ValueError):
+                conn.execute("DELETE FROM event_sources WHERE event_id = ?", (row["id"],))
+                conn.execute("DELETE FROM events WHERE id = ?", (row["id"],))
+                removed += 1
+        conn.commit()
     return removed
 
 def list_events(start_date: str, end_date: str) -> list[sqlite3.Row]:
