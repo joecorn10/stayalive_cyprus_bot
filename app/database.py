@@ -350,18 +350,18 @@ def _identity_venue(value: str) -> str:
     value = value.translate(greek)
 
     aliases = (
-        (r"\\bamfitheatro\\b", "amphitheatre"),
-        (r"\\bamfitheatro\\b", "amphitheater"),
-        (r"\\bamfitheatre\\b", "amphitheater"),
-        (r"\\bmakarioy\\b", "makarios"),
-        (r"\\bmakariou\\b", "makarios"),
-        (r"\\bscholis\\b", "school"),
-        (r"\\bscholi(?:s|a)\\b", "school"),
-        (r"\\btyflon\\b", "blind"),
-        (r"\\btyflwn\\b", "blind"),
-        (r"\\bgymnasio\\b", "gymnasium"),
-        (r"\\bgymnasiou\\b", "gymnasium"),
-        (r"\\bgymnasioy\\b", "gymnasium"),
+        (r"\bamfitheatro\\b", "amphitheatre"),
+        (r"\bamfitheatro\\b", "amphitheater"),
+        (r"\bamfitheatre\\b", "amphitheater"),
+        (r"\bmakarioy\\b", "makarios"),
+        (r"\bmakariou\\b", "makarios"),
+        (r"\bscholis\\b", "school"),
+        (r"\bscholi(?:s|a)\\b", "school"),
+        (r"\btyflon\\b", "blind"),
+        (r"\btyflwn\\b", "blind"),
+        (r"\bgymnasio\\b", "gymnasium"),
+        (r"\bgymnasiou\\b", "gymnasium"),
+        (r"\bgymnasioy\\b", "gymnasium"),
     )
     for pattern, replacement in aliases:
         value = re.sub(pattern, replacement, value, flags=re.I)
