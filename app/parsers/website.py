@@ -22,12 +22,19 @@ class WebsiteParser(EventParser):
         request_timeout = 8 if "cyprus.bz" in self.url else 20
         response = requests.get(self.url, timeout=request_timeout, headers=HEADERS)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        # Cyprus.BZ occasionally omits/incorrectly declares its charset. Requests
+        # can then decode UTF-8 Greek/Cyrillic as mojibake before BeautifulSoup
+        # ever sees the HTML. Prefer the site's UTF-8 payload explicitly.
+        if "cyprus.bz" in self.url:
+            html = response.content.decode("utf-8", errors="replace")
+        else:
+            html = response.text
+        soup = BeautifulSoup(html, "html.parser")
         if "stantarkkomety.com" in self.url:
             stantar_events = self._stantar_cards(soup)
             if stantar_events:
                 return stantar_events
-            stantar_events = self._stantar_html_cards(response.text)
+            stantar_events = self._stantar_html_cards(html)
             if stantar_events:
                 return stantar_events
         events = []
