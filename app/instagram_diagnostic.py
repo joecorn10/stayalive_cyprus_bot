@@ -11,8 +11,10 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from curl_cffi import requests as curl_requests
 
 from app.parsers.instagram import (
+    _extract_posts,
     InstagramParser,
     _canonical_profile_url,
     _fetch_posts,
@@ -30,6 +32,30 @@ def main() -> None:
 
     print(f"Instagram diagnostic: @{handle}")
     print(f"URL: {url}")
+
+    print("\n=== curl_cffi fingerprint test ===")
+    for impersonate in ("chrome", "safari", "safari_ios"):
+        try:
+            response = curl_requests.get(
+                url,
+                impersonate=impersonate,
+                timeout=20,
+                headers={"Accept-Language": "en-US,en;q=0.9"},
+            )
+            body = response.text
+            posts_from_html = _extract_posts(body, url)
+            login_wall = "login" in body.lower() and "instagram" in body.lower()
+            print(
+                f"curl_cffi {impersonate}: HTTP {response.status_code}, "
+                f"bytes={len(response.content)}, login_wall={login_wall}, "
+                f"posts={len(posts_from_html)}"
+            )
+            for index, post in enumerate(posts_from_html[:3], 1):
+                print(f"  CURL POST {index}: {post.get('url', '')}")
+                print(f"    date: {post.get('date') or '-'}")
+                print(f"    caption: {(post.get('caption') or '')[:180].replace(chr(10), ' ')}")
+        except Exception as exc:
+            print(f"curl_cffi {impersonate}: ERROR {exc}")
 
     parser = InstagramParser(url)
     posts = _fetch_posts(url)
